@@ -1,0 +1,10 @@
+target/
+out/
+.bsp/
+*.class
+.bloop/
+.metals/
+metals.sbt
+.vscode/
+.idea/
+.idea_modules/
