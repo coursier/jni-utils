@@ -1,8 +1,6 @@
 import $ivy.`de.tototec::de.tobiasroeser.mill.vcs.version_mill0.9:0.1.1`
 import $ivy.`org.codehaus.plexus:plexus-archiver:4.2.2`
 
-import $file.Sonatype, Sonatype.CustomSonatypePublisher
-
 import de.tobiasroeser.mill.vcs.version.VcsVersion
 import mill._, scalalib._
 import org.codehaus.plexus.archiver.zip.ZipUnArchiver
@@ -258,7 +256,7 @@ def publishSonatype(
     assert(set.size == 1, s"Found both snapshot and non-snapshot versions: ${versions.toVector.sorted.mkString(", ")}")
     set.head
   }
-  val publisher = new CustomSonatypePublisher(
+  val publisher = new publish.SonatypePublisher(
                uri = "https://oss.sonatype.org/service/local",
        snapshotUri = "https://oss.sonatype.org/content/repositories/snapshots",
        credentials = credentials,
