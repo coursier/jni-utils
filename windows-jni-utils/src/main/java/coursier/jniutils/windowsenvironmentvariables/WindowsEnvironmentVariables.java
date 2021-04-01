@@ -1,25 +1,21 @@
 package coursier.jniutils.windowsenvironmentvariables;
 
-import coursier.jniutils.LoadWindowsLibrary;
+import coursier.jniutils.CString;
 import coursier.jniutils.LoadWindowsLibrary;
 
 import java.io.IOException;
-import java.nio.charset.Charset;
-import java.time.LocalDateTime;
-import java.util.Arrays;
 
 public final class WindowsEnvironmentVariables {
 
-    private static native byte[] GetUserEnvironmentVariableNative(String key);
-    private static native String SetUserEnvironmentVariableNative(String key, byte[] value);
+    private static native byte[] GetUserEnvironmentVariableNative(byte[] key);
+    private static native byte[] SetUserEnvironmentVariableNative(byte[] key, byte[] value);
+    private static native byte[] DeleteUserEnvironmentVariableNative(byte[] key);
 
     public static String get(String key) throws IOException {
-        return get(key, Charset.defaultCharset());
-    }
-
-    public static String get(String key, Charset charset) throws IOException {
         LoadWindowsLibrary.ensureInitialized();
-        String value = new String(GetUserEnvironmentVariableNative(key), charset);
+        String value = CString.fromC(GetUserEnvironmentVariableNative(CString.toC(key)));
+        if (value == null)
+            return null;
         if (value.startsWith("E"))
             throw new IOException(
                     "Error getting user environment variable " + key + ": " + value.substring("E".length()));
@@ -27,22 +23,18 @@ public final class WindowsEnvironmentVariables {
     }
 
     public static void set(String key, String value) throws IOException {
-        set(key, value, Charset.defaultCharset());
-    }
-
-    public static void set(String key, String value, Charset charset) throws IOException {
-        byte[] b = value.getBytes(charset);
-        // Copying things to a NULL-terminated array
-        byte[] b0 = Arrays.copyOf(b, b.length + 1);
-        String ret = SetUserEnvironmentVariableNative(key, b0);
+        LoadWindowsLibrary.ensureInitialized();
+        String ret = CString.fromC(SetUserEnvironmentVariableNative(CString.toC(key), CString.toC(value)));
         if (ret.startsWith("E"))
             throw new IOException(
-                    "Error setting user environment variable " + key + ": " + value.substring("E".length()));
+                    "Error setting user environment variable " + key + ": " + ret.substring("E".length()));
     }
 
-    public static void main(String[] args) throws IOException {
-        System.out.println("Before: " + get("FOO"));
-        set("FOO", "Time €€ éé çç is " + LocalDateTime.now().toString());
-        System.out.println("After: " + get("FOO"));
+    public static void delete(String key) throws IOException {
+        LoadWindowsLibrary.ensureInitialized();
+        String ret = CString.fromC(DeleteUserEnvironmentVariableNative(CString.toC(key)));
+        if (ret.startsWith("E"))
+            throw new IOException(
+                    "Error deleting user environment variable " + key + ": " + ret.substring("E".length()));
     }
 }

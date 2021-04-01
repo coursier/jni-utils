@@ -10,18 +10,26 @@ extern "C" {
 /*
  * Class:     coursier_jniutils_windowsenvironmentvariables_WindowsEnvironmentVariables
  * Method:    GetUserEnvironmentVariableNative
- * Signature: (Ljava/lang/String;)[B
+ * Signature: ([B)[B
  */
 JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_windowsenvironmentvariables_WindowsEnvironmentVariables_GetUserEnvironmentVariableNative
-  (JNIEnv *, jclass, jstring);
+  (JNIEnv *, jclass, jbyteArray);
 
 /*
  * Class:     coursier_jniutils_windowsenvironmentvariables_WindowsEnvironmentVariables
  * Method:    SetUserEnvironmentVariableNative
- * Signature: (Ljava/lang/String;[B)Ljava/lang/String;
+ * Signature: ([B[B)[B
  */
-JNIEXPORT jstring JNICALL Java_coursier_jniutils_windowsenvironmentvariables_WindowsEnvironmentVariables_SetUserEnvironmentVariableNative
-  (JNIEnv *, jclass, jstring, jbyteArray);
+JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_windowsenvironmentvariables_WindowsEnvironmentVariables_SetUserEnvironmentVariableNative
+  (JNIEnv *, jclass, jbyteArray, jbyteArray);
+
+/*
+ * Class:     coursier_jniutils_windowsenvironmentvariables_WindowsEnvironmentVariables
+ * Method:    DeleteUserEnvironmentVariableNative
+ * Signature: ([B)[B
+ */
+JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_windowsenvironmentvariables_WindowsEnvironmentVariables_DeleteUserEnvironmentVariableNative
+  (JNIEnv *, jclass, jbyteArray);
 
 #ifdef __cplusplus
 }
