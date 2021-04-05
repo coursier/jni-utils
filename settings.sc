@@ -233,7 +233,10 @@ trait JniUtilsPublishModule extends PublishModule {
         .filter(_.nonEmpty)
         .getOrElse(state.format())
     } else
-      state.lastTag.getOrElse(state.format())
+      state
+        .lastTag
+        .getOrElse(state.format())
+        .stripPrefix("v")
   }
 }
 
