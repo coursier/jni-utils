@@ -1,6 +1,6 @@
 package coursier.jniutils.tests
 
-import coursier.jniutils.windowsknownfolders.WindowsKnownFolders
+import coursier.jniutils.WindowsKnownFolders
 import utest._
 
 object WindowsKnownFoldersTests extends TestSuite {

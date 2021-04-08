@@ -1,19 +1,11 @@
-package coursier.jniutils.windowsenvironmentvariables;
-
-import coursier.jniutils.CString;
-import coursier.jniutils.LoadWindowsLibrary;
+package coursier.jniutils;
 
 import java.io.IOException;
 
 public final class WindowsEnvironmentVariables {
 
-    private static native byte[] GetUserEnvironmentVariableNative(byte[] key);
-    private static native byte[] SetUserEnvironmentVariableNative(byte[] key, byte[] value);
-    private static native byte[] DeleteUserEnvironmentVariableNative(byte[] key);
-
     public static String get(String key) throws IOException {
-        LoadWindowsLibrary.ensureInitialized();
-        String value = CString.fromC(GetUserEnvironmentVariableNative(CString.toC(key)));
+        String value = CString.fromC(NativeApi.get().GetUserEnvironmentVariable(CString.toC(key)));
         if (value == null)
             return null;
         if (value.startsWith("E"))
@@ -23,16 +15,14 @@ public final class WindowsEnvironmentVariables {
     }
 
     public static void set(String key, String value) throws IOException {
-        LoadWindowsLibrary.ensureInitialized();
-        String ret = CString.fromC(SetUserEnvironmentVariableNative(CString.toC(key), CString.toC(value)));
+        String ret = CString.fromC(NativeApi.get().SetUserEnvironmentVariable(CString.toC(key), CString.toC(value)));
         if (ret.startsWith("E"))
             throw new IOException(
                     "Error setting user environment variable " + key + ": " + ret.substring("E".length()));
     }
 
     public static void delete(String key) throws IOException {
-        LoadWindowsLibrary.ensureInitialized();
-        String ret = CString.fromC(DeleteUserEnvironmentVariableNative(CString.toC(key)));
+        String ret = CString.fromC(NativeApi.get().DeleteUserEnvironmentVariable(CString.toC(key)));
         if (ret.startsWith("E"))
             throw new IOException(
                     "Error deleting user environment variable " + key + ": " + ret.substring("E".length()));

@@ -1,4 +1,4 @@
-package coursier.jniutils.windowsenvironmentvariables;
+package coursier.jniutils;
 
 import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
@@ -8,7 +8,7 @@ import org.graalvm.nativeimage.Platforms;
 import java.io.IOException;
 import java.nio.charset.Charset;
 
-@TargetClass(className = "coursier.jniutils.windowsenvironmentvariables.WindowsEnvironmentVariables")
+@TargetClass(className = "coursier.jniutils.WindowsEnvironmentVariables")
 @Platforms({Platform.DARWIN.class, Platform.LINUX.class})
 final class WindowsEnvironmentVariablesSubstitutions {
 
