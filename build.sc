@@ -32,6 +32,12 @@ object `windows-jni-utils-lmcoursier` extends WindowsUtils with JniUtilsPublishM
   )
 }
 
+object `windows-jni-utils-coursierapi` extends WindowsUtils with JniUtilsPublishModule {
+  def moduleDeps = Seq(
+    `windows-jni-utils`
+  )
+}
+
 object `windows-jni-utils-tests` extends ScalaModule with JniUtilsPublishModule {
   def scalaVersion = Scala.scala213
   def moduleDeps = Seq(
@@ -40,7 +46,8 @@ object `windows-jni-utils-tests` extends ScalaModule with JniUtilsPublishModule 
   object test extends Tests {
     def moduleDeps = super.moduleDeps ++ Seq(
       `windows-jni-utils-bootstrap`,
-      `windows-jni-utils-lmcoursier`
+      `windows-jni-utils-lmcoursier`,
+      `windows-jni-utils-coursierapi`
     )
     def ivyDeps = Agg(
       Deps.utest
@@ -59,6 +66,12 @@ object headers extends Module {
     def cDirectory = `windows-jni-utils`.cDirectory()
   }
   object `windows-jni-utils-lmcoursier` extends WindowsUtils with GenerateHeaders {
+    def moduleDeps = Seq(
+      `windows-jni-utils`
+    )
+    def cDirectory = `windows-jni-utils`.cDirectory()
+  }
+  object `windows-jni-utils-coursierapi` extends WindowsUtils with GenerateHeaders {
     def moduleDeps = Seq(
       `windows-jni-utils`
     )

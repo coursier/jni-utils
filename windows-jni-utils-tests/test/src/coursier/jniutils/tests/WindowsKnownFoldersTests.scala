@@ -19,5 +19,10 @@ object WindowsKnownFoldersTests extends TestSuite {
       lmcoursier.internal.jniutils.NativeCalls.setup()
       WindowsKnownFolders.knownFolderPath("{3EB685DB-65F9-4CF6-A03A-E3EF65729F3D}")
     }
+
+    test("coursierapi") synchronized {
+      coursierapi.internal.jniutils.NativeCalls.setup()
+      WindowsKnownFolders.knownFolderPath("{3EB685DB-65F9-4CF6-A03A-E3EF65729F3D}")
+    }
   }
 }
