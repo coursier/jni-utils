@@ -1,5 +1,5 @@
 import $file.deps, deps.{Deps, MingwCommands, Scala, WindowsJvm}
-import $file.settings, settings.{GenerateHeaders, HasCSources, JniUtilsPublishModule, downloadWindowsJvmArchive, isWindows, unpackWindowsJvmArchive}
+import $file.settings, settings.{GenerateHeaders, HasCSources, JniUtilsPublishModule, WithDllNameJava, downloadWindowsJvmArchive, isWindows, unpackWindowsJvmArchive}
 
 import mill._, scalalib._
 
@@ -8,7 +8,6 @@ import scala.concurrent.duration._
 
 object `windows-jni-utils` extends WindowsUtils with HasCSources with JniUtilsPublishModule {
   def linkingLibs = Seq("ole32")
-  def dllName = "csjniutils"
 
   def compile = T{
     headers.`windows-jni-utils`.compile()
@@ -69,8 +68,9 @@ object headers extends Module {
     define.BasePath(super.millModuleBasePath.value / os.up)
 }
 
-trait WindowsUtils extends MavenModule  {
+trait WindowsUtils extends MavenModule with WithDllNameJava {
   def compileIvyDeps = Agg(Deps.svm)
+  def dllName = "csjniutils"
 }
 
 def windowsJvmArchive = T.persistent {

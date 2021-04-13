@@ -23,7 +23,7 @@ public final class LoadWindowsLibrary {
                     } catch (URISyntaxException ex) {
                         throw new RuntimeException(ex);
                     }
-                    if (f.getName().equals(dllName + ".dll") && f.isFile())
+                    if (f.getName().equals(dllName() + ".dll") && f.isFile())
                         return f;
                 }
             }
@@ -31,7 +31,7 @@ public final class LoadWindowsLibrary {
             String strCp = System.getProperty("java.class.path");
             for (String elem: strCp.split(File.pathSeparator)) {
                 File f = new File(elem).getAbsoluteFile();
-                if (f.getName().equals(dllName + ".dll") && f.isFile())
+                if (f.getName().equals(dllName() + ".dll") && f.isFile())
                     return f;
             }
         }
@@ -40,13 +40,13 @@ public final class LoadWindowsLibrary {
     }
 
     static File fromResources(ClassLoader cl) throws IOException, URISyntaxException {
-        URL url = cl.getResource(dllResourcePath);
+        URL url = cl.getResource(dllResourcePath());
         if (url == null)
           return null;
         if (url.getProtocol().equals("file"))
             return new File(url.toURI());
         try (InputStream is = url.openStream(); ReadableByteChannel ic = Channels.newChannel(is)) {
-            File tmpFile = File.createTempFile(dllName, ".dll");
+            File tmpFile = File.createTempFile(dllName(), ".dll");
             tmpFile.deleteOnExit();
             try (FileOutputStream os = new FileOutputStream(tmpFile)) {
                 os.getChannel().transferFrom(ic, 0, Long.MAX_VALUE);
@@ -70,7 +70,7 @@ public final class LoadWindowsLibrary {
                             throw new RuntimeException(ex);
                         }
                     if (dll == null)
-                        System.loadLibrary(dllName);
+                        System.loadLibrary(dllName());
                     else
                         System.load(dll.getAbsolutePath());
                 }
@@ -78,7 +78,11 @@ public final class LoadWindowsLibrary {
         }
     }
 
-    final static String dllName = "csjniutils";
-    final static String dllResourcePath = "META-INF/native/windows64/" + dllName + ".dll";
+    final static String dllName() {
+        return DllName.name;
+    }
+    final static String dllResourcePath() {
+        return "META-INF/native/windows64/" + dllName() + ".dll";
+    }
 
 }
