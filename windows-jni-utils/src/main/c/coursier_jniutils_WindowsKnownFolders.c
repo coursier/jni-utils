@@ -22,6 +22,7 @@ JNIEXPORT jstring JNICALL Java_coursier_jniutils_NativeCalls_GetKnownFolderPathN
   WCHAR *ppszPath = NULL;
   res = SHGetKnownFolderPath(&id, 0, NULL, &ppszPath);
   if (res != 0) {
+    CoTaskMemFree(ppszPath);
     return NULL;
   }
 
