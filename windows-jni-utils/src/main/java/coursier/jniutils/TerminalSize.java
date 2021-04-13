@@ -1,4 +1,4 @@
-package coursier.jniutils.windowsansiterminal;
+package coursier.jniutils;
 
 import java.util.Objects;
 

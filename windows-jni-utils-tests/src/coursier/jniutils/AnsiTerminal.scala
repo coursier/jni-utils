@@ -1,7 +1,5 @@
 package coursier.jniutils
 
-import coursier.jniutils.windowsansiterminal.WindowsAnsiTerminal
-
 object AnsiTerminal {
   def main(args: Array[String]): Unit = {
     val verbose = args match {

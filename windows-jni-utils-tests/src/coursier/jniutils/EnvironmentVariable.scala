@@ -1,7 +1,5 @@
 package coursier.jniutils
 
-import coursier.jniutils.windowsenvironmentvariables.WindowsEnvironmentVariables
-
 object EnvironmentVariable {
   def main(args: Array[String]): Unit =
     args match {

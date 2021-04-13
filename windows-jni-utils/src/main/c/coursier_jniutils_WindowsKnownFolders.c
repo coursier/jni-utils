@@ -2,9 +2,9 @@
 #define _WIN32_WINNT 0x0600
 
 #include <shlobj.h>
-#include "coursier_jniutils_windowsknownfolders_WindowsKnownFolders.h"
+#include "coursier_jniutils_NativeCalls.h"
 
-JNIEXPORT jstring JNICALL Java_coursier_jniutils_windowsknownfolders_WindowsKnownFolders_GetKnownFolderPath
+JNIEXPORT jstring JNICALL Java_coursier_jniutils_NativeCalls_GetKnownFolderPathNative
   (JNIEnv *env, jclass cls, jstring rfid) {
 
   long res = 0;
@@ -22,6 +22,7 @@ JNIEXPORT jstring JNICALL Java_coursier_jniutils_windowsknownfolders_WindowsKnow
   WCHAR *ppszPath = NULL;
   res = SHGetKnownFolderPath(&id, 0, NULL, &ppszPath);
   if (res != 0) {
+    CoTaskMemFree(ppszPath);
     return NULL;
   }
 

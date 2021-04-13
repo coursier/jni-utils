@@ -1,18 +1,11 @@
-package coursier.jniutils.windowsansiterminal;
-
-import coursier.jniutils.LoadWindowsLibrary;
+package coursier.jniutils;
 
 import java.io.IOException;
 
 public final class WindowsAnsiTerminal {
 
-    private static native String terminalSizeNative();
-
-    private static native String enableAnsiOutputNative();
-
     public static TerminalSize terminalSize() throws IOException {
-        LoadWindowsLibrary.ensureInitialized();
-        String value = terminalSizeNative();
+        String value = NativeApi.get().terminalSize();
         if (value.startsWith("error:"))
             throw new IOException("Error getting terminal size: " + value.substring("error:".length()));
         String[] elems = value.split(":", 2);
@@ -27,8 +20,7 @@ public final class WindowsAnsiTerminal {
      * @throws IOException
      */
     public static boolean enableAnsiOutput() throws IOException {
-        LoadWindowsLibrary.ensureInitialized();
-        String value = enableAnsiOutputNative();
+        String value = NativeApi.get().enableAnsiOutput();
         if (value.startsWith("error:"))
             throw new IOException("Error enabling ANSI output: " + value.substring("error:".length()));
         return Boolean.parseBoolean(value);

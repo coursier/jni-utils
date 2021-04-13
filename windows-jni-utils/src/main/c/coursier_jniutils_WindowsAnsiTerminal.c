@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <windows.h>
-#include "coursier_jniutils_windowsansiterminal_WindowsAnsiTerminal.h"
+#include "coursier_jniutils_NativeCalls.h"
 
-jstring _Java_coursier_jniutils_windowsansiterminal_WindowsAnsiTerminal_lastError
+jstring _Java_coursier_jniutils_NativeCalls_Terminal_lastError
   (JNIEnv *env, const char *origin) {
 
   DWORD err = GetLastError();
@@ -15,7 +15,7 @@ jstring _Java_coursier_jniutils_windowsansiterminal_WindowsAnsiTerminal_lastErro
   return result;
 }
 
-jstring _Java_coursier_jniutils_windowsansiterminal_WindowsAnsiTerminal_format
+jstring _Java_coursier_jniutils_NativeCalls_Terminal_format
   (JNIEnv *env, const char *format, ...) {
 
   char dummy[1];
@@ -32,43 +32,43 @@ jstring _Java_coursier_jniutils_windowsansiterminal_WindowsAnsiTerminal_format
   return result;
 }
 
-JNIEXPORT jstring JNICALL Java_coursier_jniutils_windowsansiterminal_WindowsAnsiTerminal_terminalSizeNative
+JNIEXPORT jstring JNICALL Java_coursier_jniutils_NativeCalls_terminalSizeNative
   (JNIEnv *env, jclass class) {
 
   HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
   if (handle == INVALID_HANDLE_VALUE) {
-    return _Java_coursier_jniutils_windowsansiterminal_WindowsAnsiTerminal_lastError(env, "GetStdHandle");
+    return _Java_coursier_jniutils_NativeCalls_Terminal_lastError(env, "GetStdHandle");
   }
 
   CONSOLE_SCREEN_BUFFER_INFO info;
   memset(&info, 0, sizeof(CONSOLE_SCREEN_BUFFER_INFO));
   BOOL res = GetConsoleScreenBufferInfo(handle, &info);
   if (!res) {
-    return _Java_coursier_jniutils_windowsansiterminal_WindowsAnsiTerminal_lastError(env, "GetConsoleScreenBufferInfo");
+    return _Java_coursier_jniutils_NativeCalls_Terminal_lastError(env, "GetConsoleScreenBufferInfo");
   }
 
-  return _Java_coursier_jniutils_windowsansiterminal_WindowsAnsiTerminal_format(env, "%hu:%hu", info.dwSize.X, info.dwSize.Y);
+  return _Java_coursier_jniutils_NativeCalls_Terminal_format(env, "%hu:%hu", info.dwSize.X, info.dwSize.Y);
 }
 
-JNIEXPORT jstring JNICALL Java_coursier_jniutils_windowsansiterminal_WindowsAnsiTerminal_enableAnsiOutputNative
+JNIEXPORT jstring JNICALL Java_coursier_jniutils_NativeCalls_enableAnsiOutputNative
   (JNIEnv *env, jclass class) {
 
   HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
   if (handle == INVALID_HANDLE_VALUE) {
-    return _Java_coursier_jniutils_windowsansiterminal_WindowsAnsiTerminal_lastError(env, "GetStdHandle");
+    return _Java_coursier_jniutils_NativeCalls_Terminal_lastError(env, "GetStdHandle");
   }
 
   DWORD mode = 0;
   BOOL res = GetConsoleMode(handle, &mode);
   if (!res) {
-    return _Java_coursier_jniutils_windowsansiterminal_WindowsAnsiTerminal_lastError(env, "GetConsoleMode");
+    return _Java_coursier_jniutils_NativeCalls_Terminal_lastError(env, "GetConsoleMode");
   }
 
   char *ret = "false";
   if (!(mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING)) {
     res = SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
     if (!res) {
-      return _Java_coursier_jniutils_windowsansiterminal_WindowsAnsiTerminal_lastError(env, "GetConsoleMode");
+      return _Java_coursier_jniutils_NativeCalls_Terminal_lastError(env, "GetConsoleMode");
     }
     ret = "true";
   }
