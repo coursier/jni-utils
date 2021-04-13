@@ -13,12 +13,17 @@ import java.nio.charset.Charset;
 final class WindowsEnvironmentVariablesSubstitutions {
 
     @Substitute
-    public static String get(String key, Charset charset) throws IOException {
+    public static String get(String key) throws IOException {
         throw new RuntimeException("Not available on this platform");
     }
 
     @Substitute
-    public static void set(String key, String value, Charset charset) throws IOException {
+    public static void set(String key, String value) throws IOException {
+        throw new RuntimeException("Not available on this platform");
+    }
+
+    @Substitute
+    public static void delete(String key) throws IOException {
         throw new RuntimeException("Not available on this platform");
     }
 
