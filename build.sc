@@ -12,6 +12,9 @@ object `windows-jni-utils` extends WindowsUtils with HasCSources with JniUtilsPu
 
   def compile = T{
     headers.`windows-jni-utils`.compile()
+    headers.`windows-jni-utils-bootstrap`.compile()
+    headers.`windows-jni-utils-lmcoursier`.compile()
+    headers.`windows-jni-utils-coursierapi`.compile()
     super.compile()
   }
 
@@ -21,37 +24,27 @@ object `windows-jni-utils` extends WindowsUtils with HasCSources with JniUtilsPu
 }
 
 object `windows-jni-utils-bootstrap` extends WindowsUtils with JniUtilsPublishModule {
-  def moduleDeps = Seq(
-    `windows-jni-utils`
-  )
+  def moduleDeps = Seq(`windows-jni-utils`)
 }
 
 object `windows-jni-utils-lmcoursier` extends WindowsUtils with JniUtilsPublishModule {
-  def moduleDeps = Seq(
-    `windows-jni-utils`
-  )
+  def moduleDeps = Seq(`windows-jni-utils`)
 }
 
 object `windows-jni-utils-coursierapi` extends WindowsUtils with JniUtilsPublishModule {
-  def moduleDeps = Seq(
-    `windows-jni-utils`
-  )
+  def moduleDeps = Seq(`windows-jni-utils`)
 }
 
 object `windows-jni-utils-tests` extends ScalaModule with JniUtilsPublishModule {
   def scalaVersion = Scala.scala213
-  def moduleDeps = Seq(
-    `windows-jni-utils`
-  )
+  def moduleDeps = Seq(`windows-jni-utils`)
   object test extends Tests {
     def moduleDeps = super.moduleDeps ++ Seq(
       `windows-jni-utils-bootstrap`,
       `windows-jni-utils-lmcoursier`,
       `windows-jni-utils-coursierapi`
     )
-    def ivyDeps = Agg(
-      Deps.utest
-    )
+    def ivyDeps = Agg(Deps.utest)
     def testFrameworks = Seq("utest.runner.Framework")
   }
 }
@@ -60,21 +53,15 @@ object `windows-jni-utils-tests` extends ScalaModule with JniUtilsPublishModule 
 object headers extends Module {
   object `windows-jni-utils` extends WindowsUtils with GenerateHeaders
   object `windows-jni-utils-bootstrap` extends WindowsUtils with GenerateHeaders {
-    def moduleDeps = Seq(
-      `windows-jni-utils`
-    )
+    def moduleDeps = Seq(`windows-jni-utils`)
     def cDirectory = `windows-jni-utils`.cDirectory()
   }
   object `windows-jni-utils-lmcoursier` extends WindowsUtils with GenerateHeaders {
-    def moduleDeps = Seq(
-      `windows-jni-utils`
-    )
+    def moduleDeps = Seq(`windows-jni-utils`)
     def cDirectory = `windows-jni-utils`.cDirectory()
   }
   object `windows-jni-utils-coursierapi` extends WindowsUtils with GenerateHeaders {
-    def moduleDeps = Seq(
-      `windows-jni-utils`
-    )
+    def moduleDeps = Seq(`windows-jni-utils`)
     def cDirectory = `windows-jni-utils`.cDirectory()
   }
 
@@ -83,9 +70,7 @@ object headers extends Module {
 }
 
 trait WindowsUtils extends MavenModule  {
-  def compileIvyDeps = Agg(
-    Deps.svm
-  )
+  def compileIvyDeps = Agg(Deps.svm)
 }
 
 def windowsJvmArchive = T.persistent {
