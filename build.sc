@@ -1,5 +1,5 @@
 import $file.deps, deps.{Deps, MingwCommands, Scala, WindowsJvm}
-import $file.settings, settings.{GenerateHeaders, HasCSources, JniUtilsPublishModule, WithDllNameJava, downloadWindowsJvmArchive, isWindows, unpackWindowsJvmArchive}
+import $file.settings, settings.{GenerateHeaders, HasCSources, JniUtilsPublishModule, JniUtilsPublishVersion, WithDllNameJava, downloadWindowsJvmArchive, isWindows, unpackWindowsJvmArchive}
 
 import mill._, scalalib._
 
@@ -68,9 +68,12 @@ object headers extends Module {
     define.BasePath(super.millModuleBasePath.value / os.up)
 }
 
-trait WindowsUtils extends MavenModule with WithDllNameJava {
+trait WindowsUtils extends MavenModule with JniUtilsPublishVersion with WithDllNameJava {
   def compileIvyDeps = Agg(Deps.svm)
-  def dllName = "csjniutils"
+  def dllName = T{
+    val ver = publishVersion()
+    s"csjniutils-$ver"
+  }
 }
 
 def windowsJvmArchive = T.persistent {
