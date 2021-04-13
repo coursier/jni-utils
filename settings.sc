@@ -8,13 +8,16 @@ import org.codehaus.plexus.archiver.zip.ZipUnArchiver
 import scala.concurrent.duration.Duration
 
 trait GenerateHeaders extends JavaModule {
+  def cDirectory = T{
+    millSourcePath / "src" / "main" / "c"
+  }
   def javacOptions = T{
-    val dest = millSourcePath / "src" / "main" / "c"
+    val dest = cDirectory()
     Seq("-h", dest.toNIO.toAbsolutePath.toString)
   }
   def compile = T{
     val res = super.compile()
-    val dir = millSourcePath / "src" / "main" / "c"
+    val dir = cDirectory()
     val headerFiles = Seq(dir).flatMap { dir =>
       if (os.isDir(dir))
         os.walk(dir)

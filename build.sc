@@ -20,12 +20,21 @@ object `windows-jni-utils` extends WindowsUtils with HasCSources with JniUtilsPu
   def windowsJavaHome = sharedWindowsJavaHome()
 }
 
+object `windows-jni-utils-bootstrap` extends WindowsUtils with JniUtilsPublishModule {
+  def moduleDeps = Seq(
+    `windows-jni-utils`
+  )
+}
+
 object `windows-jni-utils-tests` extends ScalaModule with JniUtilsPublishModule {
   def scalaVersion = Scala.scala213
   def moduleDeps = Seq(
     `windows-jni-utils`
   )
   object test extends Tests {
+    def moduleDeps = super.moduleDeps ++ Seq(
+      `windows-jni-utils-bootstrap`
+    )
     def ivyDeps = Agg(
       Deps.utest
     )
@@ -36,6 +45,12 @@ object `windows-jni-utils-tests` extends ScalaModule with JniUtilsPublishModule 
 // compile these projects to generate or update JNI header files
 object headers extends Module {
   object `windows-jni-utils` extends WindowsUtils with GenerateHeaders
+  object `windows-jni-utils-bootstrap` extends WindowsUtils with GenerateHeaders {
+    def moduleDeps = Seq(
+      `windows-jni-utils`
+    )
+    def cDirectory = `windows-jni-utils`.cDirectory()
+  }
 
   implicit def millModuleBasePath: define.BasePath =
     define.BasePath(super.millModuleBasePath.value / os.up)
