@@ -209,18 +209,7 @@ def unpackWindowsJvmArchive(windowsJvmArchive: os.Path, windowsJvmArchiveName: S
   os.list(destDir).head
 }
 
-trait JniUtilsPublishModule extends PublishModule {
-  import mill.scalalib.publish._
-  def pomSettings = PomSettings(
-    description = artifactName(),
-    organization = "io.get-coursier.jniutils",
-    url = "https://github.com/coursier/jni-utils",
-    licenses = Seq(License.`Apache-2.0`),
-    versionControl = VersionControl.github("coursier", "jni-utils"),
-    developers = Seq(
-      Developer("alexarchambault", "Alex Archambault","https://github.com/alexarchambault")
-    )
-  )
+trait JniUtilsPublishVersion extends Module {
   def publishVersion = T{
     val state = VcsVersion.vcsState()
     if (state.commitsSinceLastTag > 0) {
@@ -241,6 +230,20 @@ trait JniUtilsPublishModule extends PublishModule {
         .getOrElse(state.format())
         .stripPrefix("v")
   }
+}
+
+trait JniUtilsPublishModule extends PublishModule with JniUtilsPublishVersion {
+  import mill.scalalib.publish._
+  def pomSettings = PomSettings(
+    description = artifactName(),
+    organization = "io.get-coursier.jniutils",
+    url = "https://github.com/coursier/jni-utils",
+    licenses = Seq(License.`Apache-2.0`),
+    versionControl = VersionControl.github("coursier", "jni-utils"),
+    developers = Seq(
+      Developer("alexarchambault", "Alex Archambault","https://github.com/alexarchambault")
+    )
+  )
 }
 
 def publishSonatype(
@@ -276,4 +279,21 @@ def publishSonatype(
   )
 
   publisher.publishAll(isRelease, artifacts: _*)
+}
+
+trait WithDllNameJava extends JavaModule {
+  def dllName: T[String]
+  def generatedSources = T{
+    val f = T.ctx().dest / "coursier" / "jniutils" / "DllName.java"
+    val dllName0 = dllName()
+    val content =
+     s"""package coursier.jniutils;
+        |
+        |final class DllName {
+        |  static String name = "$dllName0";
+        |}
+        |""".stripMargin
+    os.write(f, content, createFolders = true)
+    Seq(PathRef(f))
+  }
 }

@@ -24,7 +24,7 @@ public final class LoadWindowsLibraryFeature implements Feature {
     private void registerDllResource(Class<?> cls) {
         if (!registered.getAndSet(true)) {
             JNIRuntimeAccess.register(cls);
-            String resource = LoadWindowsLibrary.dllResourcePath;
+            String resource = LoadWindowsLibrary.dllResourcePath();
             InputStream is = cls.getClassLoader().getResourceAsStream(resource);
             if (is == null)
                 throw new RuntimeException("Could not find resource " + resource);
