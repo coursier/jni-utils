@@ -6,7 +6,7 @@ import mill._, scalalib._
 import scala.concurrent.duration._
 
 
-object `windows-jni-utils` extends WindowsUtils with HasCSources with JniUtilsPublishModule {
+object `windows-jni-utils` extends WindowsUtils with HasCSources with JniUtilsPublishModule with WithDllNameJava {
   def linkingLibs = Seq("ole32")
 
   def compile = T{
@@ -50,7 +50,7 @@ object `windows-jni-utils-tests` extends ScalaModule with JniUtilsPublishModule 
 
 // compile these projects to generate or update JNI header files
 object headers extends Module {
-  object `windows-jni-utils` extends WindowsUtils with GenerateHeaders
+  object `windows-jni-utils` extends WindowsUtils with GenerateHeaders with WithDllNameJava
   object `windows-jni-utils-bootstrap` extends WindowsUtils with GenerateHeaders {
     def moduleDeps = Seq(`windows-jni-utils`)
     def cDirectory = `windows-jni-utils`.cDirectory()
@@ -68,12 +68,8 @@ object headers extends Module {
     define.BasePath(super.millModuleBasePath.value / os.up)
 }
 
-trait WindowsUtils extends MavenModule with JniUtilsPublishVersion with WithDllNameJava {
+trait WindowsUtils extends MavenModule with JniUtilsPublishVersion {
   def compileIvyDeps = Agg(Deps.svm)
-  def dllName = T{
-    val ver = publishVersion()
-    s"csjniutils-$ver"
-  }
 }
 
 def windowsJvmArchive = T.persistent {

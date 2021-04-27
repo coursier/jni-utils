@@ -8,8 +8,8 @@ jstring _Java_coursier_jniutils_NativeCalls_Terminal_lastError
   DWORD err = GetLastError();
   char dummy[1];
   const int len = snprintf(dummy, 1, "error:%s error %lu", origin, err);
-  char *buf = malloc(len);
-  snprintf(buf, len, "error:%s error %lu", origin, err);
+  char *buf = malloc(len + 1);
+  snprintf(buf, len + 1, "error:%s error %lu", origin, err);
   const jstring result = (*env)->NewStringUTF(env, buf);
   free(buf);
   return result;
@@ -23,9 +23,9 @@ jstring _Java_coursier_jniutils_NativeCalls_Terminal_format
   va_start(ap, format);
   const int len = vsnprintf(dummy, 1, format, ap);
   va_end(ap);
-  char *buf = malloc(len);
+  char *buf = malloc(len + 1);
   va_start(ap, format);
-  vsnprintf(buf, len, format, ap);
+  vsnprintf(buf, len + 1, format, ap);
   va_end(ap);
   const jstring result = (*env)->NewStringUTF(env, buf);
   free(buf);

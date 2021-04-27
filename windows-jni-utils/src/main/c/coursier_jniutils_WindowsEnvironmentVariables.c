@@ -9,8 +9,8 @@
 JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_NativeCalls_SetUserEnvironmentVariableNative
   (JNIEnv *env, jclass class, jbyteArray key, jbyteArray value) {
 
-  const jbyte *keyStr = (*env)->GetByteArrayElements(env, key, NULL);
-  const jbyte *valueStr = (*env)->GetByteArrayElements(env, value, NULL);
+  jbyte *keyStr = (*env)->GetByteArrayElements(env, key, NULL);
+  jbyte *valueStr = (*env)->GetByteArrayElements(env, value, NULL);
   const size_t valueLen = (*env)->GetArrayLength(env, value);
 
   LSTATUS status = RegSetKeyValueA(
@@ -40,7 +40,7 @@ JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_NativeCalls_SetUserEnvironme
 JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_NativeCalls_GetUserEnvironmentVariableNative
   (JNIEnv *env, jclass class, jbyteArray key) {
 
-  const jbyte *keyStr = (*env)->GetByteArrayElements(env, key, NULL);
+  jbyte *keyStr = (*env)->GetByteArrayElements(env, key, NULL);
 
   DWORD type = 0;
 
@@ -100,7 +100,7 @@ JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_NativeCalls_GetUserEnvironme
 JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_NativeCalls_DeleteUserEnvironmentVariableNative
   (JNIEnv *env, jclass class, jbyteArray key) {
 
-  const jbyte *keyStr = (*env)->GetByteArrayElements(env, key, NULL);
+  jbyte *keyStr = (*env)->GetByteArrayElements(env, key, NULL);
 
   LSTATUS status = RegDeleteKeyValueA(
     HKEY_CURRENT_USER,
@@ -109,11 +109,11 @@ JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_NativeCalls_DeleteUserEnviro
   );
   (*env)->ReleaseByteArrayElements(env, key, keyStr, JNI_ABORT);
   if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND) {
-    size_t size = 256;
-    jbyteArray arr = (*env)->NewByteArray(env, size);
+    char dummy = 0;
+    int len = snprintf(&dummy, 1, "E%lu", status);
+    jbyteArray arr = (*env)->NewByteArray(env, len + 1);
     jbyte *data = (*env)->GetByteArrayElements(env, arr, NULL);
-    snprintf(data, size, "E%lu", status);
-    data[size - 1] = '\0';
+    snprintf(data, len + 1, "E%lu", status);
     (*env)->ReleaseByteArrayElements(env, arr, data, 0);
     return arr;
   }
