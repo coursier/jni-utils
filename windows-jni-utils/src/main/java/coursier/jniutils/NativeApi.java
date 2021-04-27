@@ -25,6 +25,7 @@ public abstract class NativeApi {
         Class<LowPriorityNativeApi> lowPriorityNativeApiClass = LowPriorityNativeApi.class;
 
         if (instance == null) {
+            LoadWindowsLibrary.ensureInitialized();
             Iterator<NativeApi> iterator = ServiceLoader.load(nativeApiClass).iterator();
             if (iterator.hasNext())
                 instance = iterator.next();
