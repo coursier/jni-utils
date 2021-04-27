@@ -1,6 +1,6 @@
 package coursier.jniutils;
 
-final class NativeCalls {
+public final class NativeCalls {
 
     static native String terminalSizeNative();
 
@@ -12,7 +12,7 @@ final class NativeCalls {
 
     static native String GetKnownFolderPathNative(String rfid);
     
-    static NativeApi nativeApi() {
+    public static NativeApi nativeApi() {
         LoadWindowsLibrary.ensureInitialized();
         return new NativeApi() {
             public String terminalSize() {
@@ -39,4 +39,9 @@ final class NativeCalls {
         };
     }
 
+    public static void setup() {
+        LoadWindowsLibrary.ensureInitialized();
+        NativeApi nativeApi0 = nativeApi();
+        NativeApi.set(nativeApi0);
+    }
 }
