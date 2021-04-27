@@ -11,17 +11,17 @@ object WindowsKnownFoldersTests extends TestSuite {
     }
 
     test("bootstrap") synchronized {
-      coursier.bootstrap.launcher.jniutils.NativeCalls.setup()
+      coursier.bootstrap.launcher.jniutils.BootstrapNativeApi.setup()
       WindowsKnownFolders.knownFolderPath("{3EB685DB-65F9-4CF6-A03A-E3EF65729F3D}")
     }
 
     test("lmcoursier") synchronized {
-      lmcoursier.internal.jniutils.NativeCalls.setup()
+      lmcoursier.internal.jniutils.LmNativeApi.setup()
       WindowsKnownFolders.knownFolderPath("{3EB685DB-65F9-4CF6-A03A-E3EF65729F3D}")
     }
 
     test("coursierapi") synchronized {
-      coursierapi.internal.jniutils.NativeCalls.setup()
+      coursierapi.internal.jniutils.ApiInternalNativeApi.setup()
       WindowsKnownFolders.knownFolderPath("{3EB685DB-65F9-4CF6-A03A-E3EF65729F3D}")
     }
   }
