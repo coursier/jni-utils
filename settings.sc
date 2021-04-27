@@ -282,7 +282,6 @@ def publishSonatype(
 }
 
 trait WithDllNameJava extends JavaModule {
-  def dllName: T[String]
   def generatedSources = T{
     val f = T.ctx().dest / "coursier" / "jniutils" / "DllName.java"
     val dllName0 = dllName()
@@ -295,5 +294,11 @@ trait WithDllNameJava extends JavaModule {
         |""".stripMargin
     os.write(f, content, createFolders = true)
     Seq(PathRef(f))
+  }
+
+  def publishVersion: T[String]
+  def dllName = T{
+    val ver = publishVersion()
+    s"csjniutils-$ver"
   }
 }
