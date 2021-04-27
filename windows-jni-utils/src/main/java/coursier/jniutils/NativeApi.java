@@ -2,6 +2,8 @@ package coursier.jniutils;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Iterator;
+import java.util.ServiceLoader;
 
 public abstract class NativeApi {
 
@@ -17,31 +19,26 @@ public abstract class NativeApi {
 
 
     private static NativeApi instance = null;
+
     public static NativeApi get() {
+        Class<NativeApi> nativeApiClass = NativeApi.class;
+        Class<LowPriorityNativeApi> lowPriorityNativeApiClass = LowPriorityNativeApi.class;
+
         if (instance == null) {
-            // Equivalent to
-            //     instance = NativeCalls.nativeApi();
-            // but without referencing coursier.jniutils.NativeCalls from here, so
-            // that if this code gets proguarded, the JVM doesn't try (and fail) to link the
-            // native methods of coursier.jniutils.NativeCalls. Users need setup a different
-            // NativeCalls instance themselves in that case (from one of the other modules).
-            ClassLoader cl = Thread.currentThread().getContextClassLoader();
-            String className = "coursier";
-            className = className + ".";
-            className = className + "jniutils";
-            className = className + ".";
-            className = className + "NativeCalls";
-            try {
-                Class<?> cls = cl.loadClass(className);
-                Method m = cls.getMethod("nativeApi");
-                Object v = m.invoke(null);
-                instance = (NativeApi) v;
-            } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-                throw new RuntimeException("No NativeApi instance available. Set up one with coursier.jniutils.NativeCalls.setup()", e);
-            }
+            Iterator<NativeApi> iterator = ServiceLoader.load(nativeApiClass).iterator();
+            if (iterator.hasNext())
+                instance = iterator.next();
         }
+
+        if (instance == null) {
+            Iterator<LowPriorityNativeApi> lowPriorityIterator = ServiceLoader.load(lowPriorityNativeApiClass).iterator();
+            if (lowPriorityIterator.hasNext())
+                instance = lowPriorityIterator.next();
+        }
+
         if (instance == null)
-            throw new RuntimeException("No NativeApi instance available. Set up one with coursier.jniutils.NativeCalls.setup()");
+            throw new RuntimeException("No NativeApi instance available. Could not load a Service for " + nativeApiClass + " or " + lowPriorityNativeApiClass);
+
         return instance;
     }
 

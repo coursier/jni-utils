@@ -4,9 +4,9 @@
 
 #include <stdio.h>
 #include <windows.h>
-#include "coursier_jniutils_NativeCalls.h"
+#include "coursier_jniutils_DefaultNativeApi.h"
 
-JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_NativeCalls_SetUserEnvironmentVariableNative
+JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_DefaultNativeApi_SetUserEnvironmentVariableNative
   (JNIEnv *env, jclass class, jbyteArray key, jbyteArray value) {
 
   jbyte *keyStr = (*env)->GetByteArrayElements(env, key, NULL);
@@ -37,7 +37,7 @@ JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_NativeCalls_SetUserEnvironme
   return (*env)->NewByteArray(env, 0);
 }
 
-JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_NativeCalls_GetUserEnvironmentVariableNative
+JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_DefaultNativeApi_GetUserEnvironmentVariableNative
   (JNIEnv *env, jclass class, jbyteArray key) {
 
   jbyte *keyStr = (*env)->GetByteArrayElements(env, key, NULL);
@@ -97,7 +97,7 @@ JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_NativeCalls_GetUserEnvironme
   return arr;
 }
 
-JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_NativeCalls_DeleteUserEnvironmentVariableNative
+JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_DefaultNativeApi_DeleteUserEnvironmentVariableNative
   (JNIEnv *env, jclass class, jbyteArray key) {
 
   jbyte *keyStr = (*env)->GetByteArrayElements(env, key, NULL);

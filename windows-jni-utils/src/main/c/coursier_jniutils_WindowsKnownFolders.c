@@ -2,9 +2,9 @@
 #define _WIN32_WINNT 0x0600
 
 #include <shlobj.h>
-#include "coursier_jniutils_NativeCalls.h"
+#include "coursier_jniutils_DefaultNativeApi.h"
 
-JNIEXPORT jstring JNICALL Java_coursier_jniutils_NativeCalls_GetKnownFolderPathNative
+JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_GetKnownFolderPathNative
   (JNIEnv *env, jclass cls, jstring rfid) {
 
   long res = 0;
