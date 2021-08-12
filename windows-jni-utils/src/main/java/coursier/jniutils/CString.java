@@ -14,7 +14,7 @@ public final class CString {
         }
         byte[] data0 = data;
         if (remove > 0)
-            data0 = Arrays.copyOf(data, data.length - 1);
+            data0 = Arrays.copyOf(data, data.length - remove);
         return new String(data0, Charset.defaultCharset());
     }
 
