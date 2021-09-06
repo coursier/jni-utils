@@ -3,6 +3,7 @@ import $ivy.`org.codehaus.plexus:plexus-archiver:4.2.2`
 
 import de.tobiasroeser.mill.vcs.version.VcsVersion
 import mill._, scalalib._
+import mill.scalalib.publish.PublishInfo
 import org.codehaus.plexus.archiver.zip.ZipUnArchiver
 
 import scala.concurrent.duration.Duration
@@ -81,7 +82,7 @@ lazy val isWindows = System.getProperty("os.name")
   .toLowerCase(java.util.Locale.ROOT)
   .contains("windows")
 
-trait HasCSources extends JavaModule {
+trait HasCSources extends JavaModule with PublishModule {
 
   def windowsJavaHome: T[String]
   def dllName: T[String]
@@ -129,13 +130,37 @@ trait HasCSources extends JavaModule {
       PathRef(output.resolveFrom(os.pwd))
     }
   }
-  def dll = T.persistent {
+
+  private def vcVersions = Seq("2019", "2017")
+  private def vcEditions = Seq("Enterprise", "Community", "BuildTools")
+  private lazy val vcvarsCandidates = Option(System.getenv("VCVARSALL")) ++ {
+    for {
+      version <- vcVersions
+      edition <- vcEditions
+    } yield """C:\Program Files (x86)\Microsoft Visual Studio\""" + version + "\\" + edition + """\VC\Auxiliary\Build\vcvars64.bat"""
+  }
+
+  private def vcvarsOpt: Option[os.Path] =
+    vcvarsCandidates
+      .iterator
+      .map(os.Path(_, os.pwd))
+      .filter(os.exists(_))
+      .toStream
+      .headOption
+
+  def dllAndDef = T.persistent {
+
+    // about the .def, we build it in order to build a .lib,
+    // see https://stackoverflow.com/a/3031167/3714539
+
     val dllName0 = dllName()
     val destDir = T.ctx().dest / "dlls"
     if (!os.exists(destDir))
       os.makeDir.all(destDir)
     val dest = destDir / s"$dllName0.dll"
+    val defDest = destDir / s"$dllName0.def"
     val relDest = dest.relativeTo(os.pwd)
+    val relDefDest = defDest.relativeTo(os.pwd)
     val objs = cCompile()
     val q = "\""
     val objsArgs = objs.map(o => o.path.relativeTo(os.pwd).toString).distinct
@@ -146,8 +171,8 @@ trait HasCSources extends JavaModule {
     }
     if (needsUpdate) {
       val command =
-        if (isWindows) Seq(s"${gcc.mkString(" ")} -s -shared -o $q$relDest$q ${objsArgs.map(o => q + o + q).mkString(" ")} -municode ${libsArgs.map(l => q + l + q).mkString(" ")}")
-        else gcc ++ Seq("-s", "-shared", "-o", relDest.toString) ++ objsArgs ++ Seq("-municode") ++ libsArgs
+        if (isWindows) Seq(s"${gcc.mkString(" ")} -s -shared -o $q$relDest$q ${objsArgs.map(o => q + o + q).mkString(" ")} -municode ${libsArgs.map(l => q + l + q).mkString(" ")} -Wl,--output-def,$relDefDest")
+        else gcc ++ Seq("-s", "-shared", "-o", relDest.toString) ++ objsArgs ++ Seq("-municode") ++ libsArgs ++ Seq(s"-Wl,--output-def,$relDefDest")
       System.err.println(s"Running ${command.mkString(" ")}")
       val res = os
         .proc((msysShell ++ command).map(x => x: os.Shellable): _*)
@@ -155,15 +180,58 @@ trait HasCSources extends JavaModule {
       if (res.exitCode != 0)
         sys.error(s"${gcc.mkString(" ")} command exited with code ${res.exitCode}")
     }
-    PathRef(dest)
+    (PathRef(dest), PathRef(defDest))
   }
   def resources = T.sources {
-    val dll0 = dll().path
+    val dll0 = dllAndDef()._1.path
     val dir = T.ctx().dest / "dll-resources"
     val dllDir = dir / "META-INF" / "native" / "windows64"
     os.copy(dll0, dllDir / dll0.last, replaceExisting = true, createFolders = true)
     super.resources() ++ Seq(PathRef(dir))
   }
+
+  def libFile = T {
+    val defFile = dllAndDef()._2.path
+    val vcvars = vcvarsOpt.getOrElse {
+      sys.error("vcvars64.bat not found. Ensure Visual Studio is installed, or put the vcvars64.bat path in VCVARSALL.")
+    }
+    val script =
+     s"""@call "$vcvars"
+        |if %errorlevel% neq 0 exit /b %errorlevel%
+        |lib "/def:$defFile"
+        |""".stripMargin
+    val scriptPath = T.dest / "run-lib.bat"
+    os.write.over(scriptPath, script.getBytes, createFolders = true)
+    os.proc(scriptPath).call(cwd = T.dest)
+    val libFile = T.dest / (defFile.last.stripSuffix(".def") + ".lib")
+    if (!os.isFile(libFile))
+      sys.error(s"Error: $libFile not created")
+    PathRef(libFile)
+  }
+
+  def extraPublish = super.extraPublish() ++ Seq(
+    PublishInfo(
+      file = dllAndDef()._1,
+      ivyConfig = "compile",
+      classifier = Some("x86_64-pc-win32"),
+      ext = "dll",
+      ivyType = "dll"
+    ),
+    PublishInfo(
+      file = dllAndDef()._2,
+      ivyConfig = "compile",
+      classifier = Some("x86_64-pc-win32"),
+      ext = "def",
+      ivyType = "def"
+    ),
+    PublishInfo(
+      file = libFile(),
+      ivyConfig = "compile",
+      classifier = Some("x86_64-pc-win32"),
+      ext = "lib",
+      ivyType = "lib"
+    )
+  )
 }
 
 def downloadWindowsJvmArchive(windowsJvmUrl: String, windowsJvmArchiveName: String)(implicit ctx: mill.util.Ctx.Dest) = {
