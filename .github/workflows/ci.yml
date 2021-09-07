@@ -29,6 +29,9 @@ jobs:
     - name: Test
       if: runner.os == 'Windows'
       run: ./mill -i __.test
+    - name: Publish local
+      if: runner.os == 'Windows'
+      run: ./mill -i __.publishLocal
 
   publish:
     needs: test
