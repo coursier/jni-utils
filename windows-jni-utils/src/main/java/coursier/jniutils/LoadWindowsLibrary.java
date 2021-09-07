@@ -55,6 +55,13 @@ public final class LoadWindowsLibrary {
         }
     }
 
+    public static void assumeInitialized() {
+        assumeInitialized(true);
+    }
+    public static void assumeInitialized(boolean initialized) {
+        LoadWindowsLibrary.initialized = initialized;
+    }
+
     final static Object lock = new Object();
     static boolean initialized = false;
     public static void ensureInitialized() {
