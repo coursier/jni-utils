@@ -6,7 +6,7 @@ import mill._, scalalib._
 import scala.concurrent.duration._
 
 
-object `windows-jni-utils` extends WindowsUtils with HasCSources with JniUtilsPublishModule with WithDllNameJava {
+object `windows-jni-utils` extends MavenModule with JniUtilsPublishVersion with HasCSources with JniUtilsPublishModule with WithDllNameJava {
   def linkingLibs = Seq("ole32")
 
   def compile = T{
@@ -20,6 +20,10 @@ object `windows-jni-utils` extends WindowsUtils with HasCSources with JniUtilsPu
   def msysShell = MingwCommands.msysShell
   def gcc = MingwCommands.gcc
   def windowsJavaHome = sharedWindowsJavaHome()
+}
+
+object `windows-jni-utils-graalvm` extends WindowsUtils with JniUtilsPublishModule {
+  def moduleDeps = Seq(`windows-jni-utils`)
 }
 
 object `windows-jni-utils-bootstrap` extends WindowsUtils with JniUtilsPublishModule {
