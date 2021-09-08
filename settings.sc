@@ -175,8 +175,7 @@ trait HasCSources extends JavaModule with PublishModule {
       objs.exists(o => os.mtime(o.path) > destMtime)
     }
     if (needsUpdate) {
-      val libPath = Seq("C:", "Program Files (x86)", "Windows Kits", "10", "Lib", "10.0.19041.0", "um", "x64").mkString("\\")
-      val script = //  $q/LIBPATH:$libPath$q
+      val script =
        s"""@call "$vcvars"
           |if %errorlevel% neq 0 exit /b %errorlevel%
           |link /DLL "/OUT:$dest" ${libsArgs.mkString(" ")} ${objs.map(f => "\"" + f.path.toString + "\"").mkString(" ")}
