@@ -1,5 +1,5 @@
-import $file.deps, deps.{Deps, MingwCommands, Scala, WindowsJvm}
-import $file.settings, settings.{GenerateHeaders, HasCSources, JniUtilsPublishModule, JniUtilsPublishVersion, WithDllNameJava, downloadWindowsJvmArchive, isWindows, unpackWindowsJvmArchive}
+import $file.deps, deps.{Deps, Scala, WindowsJvm}
+import $file.settings, settings.{GenerateHeaders, HasCSources, JniUtilsPublishModule, JniUtilsPublishVersion, WithDllNameJava}
 
 import mill._, scalalib._
 
@@ -7,7 +7,7 @@ import scala.concurrent.duration._
 
 
 object `windows-jni-utils` extends MavenModule with JniUtilsPublishVersion with HasCSources with JniUtilsPublishModule with WithDllNameJava {
-  def linkingLibs = Seq("ole32")
+  def linkingLibs = Seq("ole32", "shell32", "Advapi32")
 
   def compile = T{
     headers.`windows-jni-utils`.compile()
@@ -17,9 +17,14 @@ object `windows-jni-utils` extends MavenModule with JniUtilsPublishVersion with 
     super.compile()
   }
 
-  def msysShell = MingwCommands.msysShell
-  def gcc = MingwCommands.gcc
-  def windowsJavaHome = sharedWindowsJavaHome()
+  def windowsJavaHome = T{
+    import java.io.File
+    val value = sys.props("java.home")
+    val dir = new File(value)
+    // Seems required with Java 8
+    if (dir.getName == "jre") dir.getParent
+    else value
+  }
 }
 
 object `windows-jni-utils-graalvm` extends WindowsUtils with JniUtilsPublishModule {
@@ -75,27 +80,6 @@ object headers extends Module {
 trait WindowsUtils extends MavenModule with JniUtilsPublishVersion {
   def compileIvyDeps = Agg(Deps.svm)
 }
-
-def windowsJvmArchive = T.persistent {
-  downloadWindowsJvmArchive(WindowsJvm.url, WindowsJvm.archiveName)
-}
-
-def sharedWindowsJavaHome: T[String] =
-  if (isWindows)
-    T{
-      import java.io.File
-      val value = sys.props("java.home")
-      val dir = new File(value)
-      // Seems required with Java 8
-      if (dir.getName == "jre") dir.getParent
-      else value
-    }
-  else
-    T.persistent {
-      // On Linux / macOS, get a Windows JDK for the Windows JNI header files
-      val windowsJvmArchive0 = windowsJvmArchive()
-      unpackWindowsJvmArchive(windowsJvmArchive0.path, WindowsJvm.archiveName).toString
-    }
 
 def publishSonatype(tasks: mill.main.Tasks[PublishModule.PublishData]) =
   T.command {

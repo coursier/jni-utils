@@ -9,28 +9,21 @@ on:
 
 jobs:
   test:
-    runs-on: ${{ matrix.OS }}
-    strategy:
-      fail-fast: false
-      matrix:
-        OS: ["ubuntu-latest", "windows-latest"]
+    runs-on: windows-latest
     steps:
     - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        submodules: true
     - uses: coursier/cache-action@v6
     - uses: coursier/setup-action@v1
       with:
         jvm: 8
-    - name: Set up MinGW
-      uses: egor-tensin/setup-mingw@f3c5d799aadf8fa230ac67a422b01dd085bbc96b
-      with:
-        platform: x64
     - name: Compile
       run: ./mill -i __.test.compile
     - name: Test
-      if: runner.os == 'Windows'
       run: ./mill -i __.test
     - name: Publish local
-      if: runner.os == 'Windows'
       run: ./mill -i __.publishLocal
 
   publish:
@@ -39,6 +32,9 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        submodules: true
     - uses: coursier/cache-action@v6
     - uses: coursier/setup-action@v1
       with:

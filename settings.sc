@@ -78,9 +78,28 @@ def toCrLfOpt(content: Array[Byte]): Option[Array[Byte]] = {
   }
 }
 
-lazy val isWindows = System.getProperty("os.name")
-  .toLowerCase(java.util.Locale.ROOT)
-  .contains("windows")
+private def vcVersions = Seq("2019", "2017")
+private def vcEditions = Seq("Enterprise", "Community", "BuildTools")
+private lazy val vcvarsCandidates = Option(System.getenv("VCVARSALL")) ++ {
+  for {
+    version <- vcVersions
+    edition <- vcEditions
+  } yield """C:\Program Files (x86)\Microsoft Visual Studio\""" + version + "\\" + edition + """\VC\Auxiliary\Build\vcvars64.bat"""
+}
+
+private def vcvarsOpt: Option[os.Path] =
+  vcvarsCandidates
+    .iterator
+    .map(os.Path(_, os.pwd))
+    .filter(os.exists(_))
+    .toStream
+    .headOption
+
+private lazy val vcvars = vcvarsOpt.getOrElse {
+  sys.error("vcvars64.bat not found. Ensure Visual Studio is installed, or put the vcvars64.bat path in VCVARSALL.")
+}
+
+private def q = "\""
 
 trait HasCSources extends JavaModule with PublishModule {
 
@@ -88,9 +107,6 @@ trait HasCSources extends JavaModule with PublishModule {
   def dllName: T[String]
 
   def linkingLibs = T{ Seq.empty[String] }
-
-  def msysShell: Seq[String]
-  def gcc: Seq[String]
 
   def cSources = T.sources {
     Seq(PathRef(millSourcePath / "src" / "main" / "c"))
@@ -105,176 +121,96 @@ trait HasCSources extends JavaModule with PublishModule {
         Nil
     }
     val javaHome0 = windowsJavaHome()
-    val escapedJavaHome =
-      if (isWindows) "/" + javaHome0.replace("\\", "/")
-      else javaHome0
     for (f <- cFiles) yield {
       if (!os.exists(destDir))
         os.makeDir.all(destDir)
       val path = f.relativeTo(os.pwd).toString
-      val output = destDir / s"${f.last.stripSuffix(".c")}.o"
+      val output = destDir / s"${f.last.stripSuffix(".c")}.obj"
       val needsUpdate = !os.isFile(output) || os.mtime(output) < os.mtime(f)
       if (needsUpdate) {
-        val relOutput = output.relativeTo(os.pwd)
-        val q = "\""
-        val command =
-          if (isWindows) Seq(s"${gcc.mkString(" ")} -c -Wall -fPIC $q-I$escapedJavaHome/include$q $q-I$escapedJavaHome/include/win32$q $q$path$q -o $relOutput")
-          else gcc ++ Seq("-c", "-Wall", "-fPIC", s"-I$escapedJavaHome/include", s"-I$escapedJavaHome/include/win32", path, "-o", relOutput.toString)
-        System.err.println(s"Running ${command.mkString(" ")}")
-        val res = os
-          .proc((msysShell ++ command).map(x => x: os.Shellable): _*)
-          .call(stdin = os.Inherit, stdout = os.Inherit, stderr = os.Inherit)
-        if (res.exitCode != 0)
-          sys.error(s"${gcc.mkString(" ")} command exited with code ${res.exitCode}")
+        val script =
+         s"""@call "$vcvars"
+            |if %errorlevel% neq 0 exit /b %errorlevel%
+            |cl /I $q$javaHome0/include$q /I $q$javaHome0/include/win32$q /utf-8 /c $q$f$q
+            |""".stripMargin
+        val scriptPath = T.dest / "run-cl.bat"
+        os.write.over(scriptPath, script.getBytes, createFolders = true)
+        os.proc(scriptPath).call(cwd = destDir)
       }
       PathRef(output.resolveFrom(os.pwd))
     }
   }
-
-  private def vcVersions = Seq("2019", "2017")
-  private def vcEditions = Seq("Enterprise", "Community", "BuildTools")
-  private lazy val vcvarsCandidates = Option(System.getenv("VCVARSALL")) ++ {
-    for {
-      version <- vcVersions
-      edition <- vcEditions
-    } yield """C:\Program Files (x86)\Microsoft Visual Studio\""" + version + "\\" + edition + """\VC\Auxiliary\Build\vcvars64.bat"""
+  def cLib = T.persistent {
+    val allObjFiles = cCompile().map(_.path)
+    val fileName = "csjniutils.lib"
+    val output = T.dest / fileName
+    val libNeedsUpdate = !os.isFile(output) || allObjFiles.exists(f => os.mtime(output) < os.mtime(f))
+    if (libNeedsUpdate) {
+      val script =
+       s"""@call "$vcvars"
+          |if %errorlevel% neq 0 exit /b %errorlevel%
+          |lib "/out:$fileName" ${allObjFiles.map(f => "\"" + f.toString + "\"").mkString(" ")}
+          |""".stripMargin
+      val scriptPath = T.dest / "run-lib.bat"
+      os.write.over(scriptPath, script.getBytes, createFolders = true)
+      os.proc(scriptPath).call(cwd = T.dest)
+      if (!os.isFile(output))
+        sys.error(s"Error: $output not created")
+    }
+    PathRef(output)
   }
 
-  private def vcvarsOpt: Option[os.Path] =
-    vcvarsCandidates
-      .iterator
-      .map(os.Path(_, os.pwd))
-      .filter(os.exists(_))
-      .toStream
-      .headOption
-
-  def dllAndDef = T.persistent {
-
-    // about the .def, we build it in order to build a .lib,
-    // see https://stackoverflow.com/a/3031167/3714539
-
+  def dll = T.persistent {
     val dllName0 = dllName()
     val destDir = T.ctx().dest / "dlls"
     if (!os.exists(destDir))
       os.makeDir.all(destDir)
     val dest = destDir / s"$dllName0.dll"
-    val defDest = destDir / s"$dllName0.def"
     val relDest = dest.relativeTo(os.pwd)
-    val relDefDest = defDest.relativeTo(os.pwd)
     val objs = cCompile()
-    val q = "\""
     val objsArgs = objs.map(o => o.path.relativeTo(os.pwd).toString).distinct
-    val libsArgs = linkingLibs().map(l => "-l" + l)
+    val libsArgs = linkingLibs().map(l => l + ".lib")
     val needsUpdate = !os.isFile(dest) || {
       val destMtime = os.mtime(dest)
       objs.exists(o => os.mtime(o.path) > destMtime)
     }
     if (needsUpdate) {
-      val command =
-        if (isWindows) Seq(s"${gcc.mkString(" ")} -s -shared -o $q$relDest$q ${objsArgs.map(o => q + o + q).mkString(" ")} -municode ${libsArgs.map(l => q + l + q).mkString(" ")} -Wl,--output-def,$relDefDest")
-        else gcc ++ Seq("-s", "-shared", "-o", relDest.toString) ++ objsArgs ++ Seq("-municode") ++ libsArgs ++ Seq(s"-Wl,--output-def,$relDefDest")
-      System.err.println(s"Running ${command.mkString(" ")}")
-      val res = os
-        .proc((msysShell ++ command).map(x => x: os.Shellable): _*)
-        .call(stdin = os.Inherit, stdout = os.Inherit, stderr = os.Inherit)
-      if (res.exitCode != 0)
-        sys.error(s"${gcc.mkString(" ")} command exited with code ${res.exitCode}")
+      val libPath = Seq("C:", "Program Files (x86)", "Windows Kits", "10", "Lib", "10.0.19041.0", "um", "x64").mkString("\\")
+      val script = //  $q/LIBPATH:$libPath$q
+       s"""@call "$vcvars"
+          |if %errorlevel% neq 0 exit /b %errorlevel%
+          |link /DLL "/OUT:$dest" ${libsArgs.mkString(" ")} ${objs.map(f => "\"" + f.path.toString + "\"").mkString(" ")}
+          |""".stripMargin
+      val scriptPath = T.dest / "run-cl.bat"
+      os.write.over(scriptPath, script.getBytes, createFolders = true)
+      os.proc(scriptPath).call(cwd = T.dest)
     }
-    (PathRef(dest), PathRef(defDest))
+    PathRef(dest)
   }
   def resources = T.sources {
-    val dll0 = dllAndDef()._1.path
+    val dll0 = dll().path
     val dir = T.ctx().dest / "dll-resources"
     val dllDir = dir / "META-INF" / "native" / "windows64"
     os.copy(dll0, dllDir / dll0.last, replaceExisting = true, createFolders = true)
     super.resources() ++ Seq(PathRef(dir))
   }
 
-  def libFile = T {
-    val defFile = dllAndDef()._2.path
-    val vcvars = vcvarsOpt.getOrElse {
-      sys.error("vcvars64.bat not found. Ensure Visual Studio is installed, or put the vcvars64.bat path in VCVARSALL.")
-    }
-    val script =
-     s"""@call "$vcvars"
-        |if %errorlevel% neq 0 exit /b %errorlevel%
-        |lib "/def:$defFile"
-        |""".stripMargin
-    val scriptPath = T.dest / "run-lib.bat"
-    os.write.over(scriptPath, script.getBytes, createFolders = true)
-    os.proc(scriptPath).call(cwd = T.dest)
-    val libFile = T.dest / (defFile.last.stripSuffix(".def") + ".lib")
-    if (!os.isFile(libFile))
-      sys.error(s"Error: $libFile not created")
-    PathRef(libFile)
-  }
-
   def extraPublish = super.extraPublish() ++ Seq(
     PublishInfo(
-      file = dllAndDef()._1,
+      file = dll(),
       ivyConfig = "compile",
       classifier = Some("x86_64-pc-win32"),
       ext = "dll",
       ivyType = "dll"
     ),
     PublishInfo(
-      file = dllAndDef()._2,
-      ivyConfig = "compile",
-      classifier = Some("x86_64-pc-win32"),
-      ext = "def",
-      ivyType = "def"
-    ),
-    PublishInfo(
-      file = libFile(),
+      file = cLib(),
       ivyConfig = "compile",
       classifier = Some("x86_64-pc-win32"),
       ext = "lib",
       ivyType = "lib"
     )
   )
-}
-
-def downloadWindowsJvmArchive(windowsJvmUrl: String, windowsJvmArchiveName: String)(implicit ctx: mill.util.Ctx.Dest) = {
-  val destDir = ctx.dest / "download"
-  val dest = destDir / windowsJvmArchiveName
-  if (!os.isFile(dest)) {
-    os.makeDir.all(destDir)
-    val tmpDest = destDir / s"$windowsJvmArchiveName.part"
-    mill.modules.Util.download(windowsJvmUrl, tmpDest.relativeTo(ctx.dest))
-    os.move(tmpDest, dest)
-  }
-  PathRef(dest)
-}
-
-def unpackWindowsJvmArchive(windowsJvmArchive: os.Path, windowsJvmArchiveName: String)(implicit ctx: mill.util.Ctx.Dest): os.Path = {
-  val destDir = ctx.dest / windowsJvmArchiveName.stripSuffix(".zip")
-  if (!os.isDir(destDir)) {
-    val tmpDir = ctx.dest / (windowsJvmArchiveName.stripSuffix(".zip") + ".part")
-
-    val unArchiver = {
-      val u = new ZipUnArchiver
-      u.enableLogging {
-        import org.codehaus.plexus.logging.{AbstractLogger, Logger}
-        new AbstractLogger(Logger.LEVEL_DISABLED, "foo") {
-          def debug(message: String, throwable: Throwable) = ()
-          def info(message: String, throwable: Throwable) = ()
-          def warn(message: String, throwable: Throwable) = ()
-          def error(message: String, throwable: Throwable) = ()
-          def fatalError(message: String, throwable: Throwable) = ()
-          def getChildLogger(name: String) = this
-        }
-      }
-      u.setOverwrite(false)
-      u
-    }
-    unArchiver.setSourceFile(windowsJvmArchive.toIO)
-    unArchiver.setDestDirectory(tmpDir.toIO)
-
-    os.makeDir.all(tmpDir)
-    unArchiver.extract()
-    os.move(tmpDir, destDir)
-  }
-  os.list(destDir).head
 }
 
 trait JniUtilsPublishVersion extends Module {
