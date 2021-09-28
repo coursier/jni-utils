@@ -20,17 +20,9 @@ To check if such a JVM is installed, run
 `java -version`, and check that it prints a version
 higher than or equal to `8`.
 
-#### mingw
+#### Visual C++
 
-[mingw](https://www.mingw-w64.org) is required to build the dll files out of
-`.h` / `.c` files calling native Windows native APIs, and interfacing with JNI.
-
-On Windows, the *coursier-jni-utils* build assumes mingw is installed under
-`C:\msys64`. If it's installed at a different location, edit the `msys2Entrypoint`
-method in `deps.sc` accordingly.
-
-On Linux and macOS, the *coursier-jni-utils* build assumes mingw gcc can be run with
-`x86_64-w64-mingw32-gcc`.
+A Visual Studio installation with Visual C++ is required.
 
 ### IDE
 
