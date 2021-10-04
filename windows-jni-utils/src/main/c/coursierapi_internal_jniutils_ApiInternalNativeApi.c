@@ -30,3 +30,8 @@ JNIEXPORT jstring JNICALL Java_coursierapi_internal_jniutils_ApiInternalNativeAp
   (JNIEnv *env, jclass class, jstring rfid) {
   return Java_coursier_jniutils_DefaultNativeApi_GetKnownFolderPathNative(env, class, rfid);
 }
+
+JNIEXPORT jstring JNICALL Java_coursierapi_internal_jniutils_ApiInternalNativeApi_GetModuleFileNameNative
+  (JNIEnv *env, jclass class) {
+  return Java_coursier_jniutils_DefaultNativeApi_GetModuleFileNameNative(env, class);
+}

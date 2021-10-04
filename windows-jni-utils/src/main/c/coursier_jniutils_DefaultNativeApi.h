@@ -55,6 +55,14 @@ JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_DefaultNativeApi_DeleteUserE
 JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_GetKnownFolderPathNative
   (JNIEnv *, jclass, jstring);
 
+/*
+ * Class:     coursier_jniutils_DefaultNativeApi
+ * Method:    GetModuleFileNameNative
+ * Signature: ()Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_GetModuleFileNameNative
+  (JNIEnv *, jclass);
+
 #ifdef __cplusplus
 }
 #endif

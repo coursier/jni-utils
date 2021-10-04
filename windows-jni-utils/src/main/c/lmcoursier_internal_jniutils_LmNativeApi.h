@@ -55,6 +55,14 @@ JNIEXPORT jbyteArray JNICALL Java_lmcoursier_internal_jniutils_LmNativeApi_Delet
 JNIEXPORT jstring JNICALL Java_lmcoursier_internal_jniutils_LmNativeApi_GetKnownFolderPathNative
   (JNIEnv *, jclass, jstring);
 
+/*
+ * Class:     lmcoursier_internal_jniutils_LmNativeApi
+ * Method:    GetModuleFileNameNative
+ * Signature: ()Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_lmcoursier_internal_jniutils_LmNativeApi_GetModuleFileNameNative
+  (JNIEnv *, jclass);
+
 #ifdef __cplusplus
 }
 #endif

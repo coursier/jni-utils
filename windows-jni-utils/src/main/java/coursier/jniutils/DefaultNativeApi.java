@@ -12,6 +12,8 @@ public final class DefaultNativeApi extends LowPriorityNativeApi {
 
     static native String GetKnownFolderPathNative(String rfid);
 
+    static native String GetModuleFileNameNative();
+
 
     public String terminalSize() {
         return terminalSizeNative();
@@ -33,5 +35,9 @@ public final class DefaultNativeApi extends LowPriorityNativeApi {
 
     public String GetKnownFolderPath(String rfid) {
         return GetKnownFolderPathNative(rfid);
+    }
+
+    public String GetModuleFileName() {
+        return GetModuleFileNameNative();
     }
 }

@@ -7,7 +7,7 @@ import scala.concurrent.duration._
 
 
 object `windows-jni-utils` extends MavenModule with JniUtilsPublishVersion with HasCSources with JniUtilsPublishModule with WithDllNameJava {
-  def linkingLibs = Seq("ole32", "shell32", "Advapi32")
+  def linkingLibs = Seq("ole32", "shell32", "advapi32", "kernel32")
 
   def compile = T{
     headers.`windows-jni-utils`.compile()
