@@ -17,6 +17,8 @@ public abstract class NativeApi {
 
     public abstract String GetKnownFolderPath(String rfid);
 
+    public abstract String GetModuleFileName();
+
 
     private static NativeApi instance = null;
 

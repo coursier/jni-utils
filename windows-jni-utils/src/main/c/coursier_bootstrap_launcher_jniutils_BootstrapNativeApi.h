@@ -55,6 +55,14 @@ JNIEXPORT jbyteArray JNICALL Java_coursier_bootstrap_launcher_jniutils_Bootstrap
 JNIEXPORT jstring JNICALL Java_coursier_bootstrap_launcher_jniutils_BootstrapNativeApi_GetKnownFolderPathNative
   (JNIEnv *, jclass, jstring);
 
+/*
+ * Class:     coursier_bootstrap_launcher_jniutils_BootstrapNativeApi
+ * Method:    GetModuleFileNameNative
+ * Signature: ()Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_coursier_bootstrap_launcher_jniutils_BootstrapNativeApi_GetModuleFileNameNative
+  (JNIEnv *, jclass);
+
 #ifdef __cplusplus
 }
 #endif

@@ -15,6 +15,7 @@ public final class BootstrapNativeApi extends NativeApi {
 
     static native String GetKnownFolderPathNative(String rfid);
 
+    static native String GetModuleFileNameNative();
 
     public String terminalSize() {
         return terminalSizeNative();
@@ -36,6 +37,10 @@ public final class BootstrapNativeApi extends NativeApi {
 
     public String GetKnownFolderPath(String rfid) {
         return GetKnownFolderPathNative(rfid);
+    }
+
+    public String GetModuleFileName() {
+        return GetModuleFileNameNative();
     }
 
     static {
