@@ -53,7 +53,7 @@ object `windows-jni-utils-tests` extends ScalaModule with JniUtilsPublishModule 
       `windows-jni-utils-coursierapi`
     )
     def ivyDeps = Agg(Deps.utest)
-    def testFrameworks = Seq("utest.runner.Framework")
+    def testFramework = "utest.runner.Framework"
   }
 }
 
