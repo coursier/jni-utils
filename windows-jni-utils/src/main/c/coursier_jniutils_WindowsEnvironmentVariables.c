@@ -60,6 +60,9 @@ JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_DefaultNativeApi_GetUserEnvi
   jbyte *data = NULL;
 
   if (status == ERROR_SUCCESS || status == ERROR_MORE_DATA) {
+    if (status == ERROR_MORE_DATA) {
+      size = size + 1; /* ??? */
+    }
     arr = (*env)->NewByteArray(env, size + 1);
     data = (*env)->GetByteArrayElements(env, arr, NULL);
 
