@@ -78,13 +78,18 @@ def toCrLfOpt(content: Array[Byte]): Option[Array[Byte]] = {
   }
 }
 
-private def vcVersions = Seq("2019", "2017")
+private def vcVersions = Seq("2022", "2019", "2017")
 private def vcEditions = Seq("Enterprise", "Community", "BuildTools")
+private def progFiles = Seq(
+  """C:\Program Files""",
+  """C:\Program Files (x86)"""
+)
 private lazy val vcvarsCandidates = Option(System.getenv("VCVARSALL")) ++ {
   for {
+    progFiles0 <- progFiles
     version <- vcVersions
     edition <- vcEditions
-  } yield """C:\Program Files (x86)\Microsoft Visual Studio\""" + version + "\\" + edition + """\VC\Auxiliary\Build\vcvars64.bat"""
+  } yield progFiles0 + """\Microsoft Visual Studio\""" + version + "\\" + edition + """\VC\Auxiliary\Build\vcvars64.bat"""
 }
 
 private def vcvarsOpt: Option[os.Path] =
