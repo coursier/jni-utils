@@ -39,10 +39,6 @@ jobs:
     - uses: coursier/setup-action@v1
       with:
         jvm: 8
-    - name: Set up MinGW
-      uses: egor-tensin/setup-mingw@f3c5d799aadf8fa230ac67a422b01dd085bbc96b
-      with:
-        platform: x64
     - run: .github/scripts/gpg-setup.sh
       shell: bash
       env:

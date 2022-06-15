@@ -8,7 +8,7 @@ native APIs from Java / Scala via JNI.
 
 *coursier-jni-utils* is built with
 [Mill](https://com-lihaoyi.github.io/mill). It comes up with Mill launchers
-(`mill`, `mill.bat`), so that only a JVM and [mingw](https://www.mingw-w64.org)
+(`mill`, `mill.bat`), so that only a JVM and the Visual C++ compiler
 should be needed to build it.
 
 ### Requirements
@@ -40,7 +40,7 @@ Then open the `jni-utils` directory in IDEA.
 $ ./mill __.compile
 ```
 
-This should automatically compile `.h` / `.c` files with mingw, create a
+This should automatically compile `.h` / `.c` files with Visual C++, create a
 corresponding `.dll`, and make it available as a resource from Java.
 
 ### Running tests
