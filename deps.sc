@@ -6,7 +6,7 @@ object Deps {
 }
 
 object Scala {
-  def scala213 = "2.13.5"
+  def scala213 = "2.13.15"
 }
 
 object WindowsJvm {
