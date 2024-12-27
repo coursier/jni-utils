@@ -1,4 +1,4 @@
-import $file.deps, deps.{Deps, Scala, WindowsJvm}
+import $file.deps, deps.{Deps, Scala}
 import $file.settings, settings.{GenerateHeaders, HasCSources, JniUtilsPublishModule, JniUtilsPublishVersion, WithDllNameJava}
 
 import mill._, scalalib._
