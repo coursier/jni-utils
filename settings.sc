@@ -96,9 +96,7 @@ private def vcvarsOpt: Option[os.Path] =
   vcvarsCandidates
     .iterator
     .map(os.Path(_, os.pwd))
-    .filter(os.exists(_))
-    .toStream
-    .headOption
+    .find(os.exists)
 
 private lazy val vcvars = vcvarsOpt.getOrElse {
   sys.error("vcvars64.bat not found. Ensure Visual Studio is installed, or put the vcvars64.bat path in VCVARSALL.")
