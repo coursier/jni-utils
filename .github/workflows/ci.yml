@@ -41,10 +41,10 @@ jobs:
     - run: .github/scripts/gpg-setup.sh
       shell: bash
       env:
-        PGP_SECRET: ${{ secrets.PGP_SECRET }}
+        PGP_SECRET: ${{ secrets.PUBLISH_SECRET_KEY }}
     - name: Release
       run: ./mill -i publishSonatype --tasks __.publishArtifacts
       env:
-        PGP_PASSWORD: ${{ secrets.PGP_PASSPHRASE }}
-        SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
-        SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+        PGP_PASSWORD: ${{ secrets.PUBLISH_SECRET_KEY_PASSWORD }}
+        SONATYPE_USERNAME: ${{ secrets.PUBLISH_USER }}
+        SONATYPE_PASSWORD: ${{ secrets.PUBLISH_PASSWORD }}
