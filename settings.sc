@@ -1,4 +1,4 @@
-import $ivy.`de.tototec::de.tobiasroeser.mill.vcs.version_mill0.9:0.1.1`
+import $ivy.`de.tototec::de.tobiasroeser.mill.vcs.version::0.4.1`
 import $ivy.`org.codehaus.plexus:plexus-archiver:4.2.2`
 
 import de.tobiasroeser.mill.vcs.version.VcsVersion
@@ -96,9 +96,7 @@ private def vcvarsOpt: Option[os.Path] =
   vcvarsCandidates
     .iterator
     .map(os.Path(_, os.pwd))
-    .filter(os.exists(_))
-    .toStream
-    .headOption
+    .find(os.exists)
 
 private lazy val vcvars = vcvarsOpt.getOrElse {
   sys.error("vcvars64.bat not found. Ensure Visual Studio is installed, or put the vcvars64.bat path in VCVARSALL.")
@@ -125,7 +123,7 @@ trait HasCSources extends JavaModule with PublishModule {
       else
         Nil
     }
-    val javaHome0 = windowsJavaHome()
+    val javaHome0 = os.Path(windowsJavaHome())
     for (f <- cFiles) yield {
       if (!os.exists(destDir))
         os.makeDir.all(destDir)
@@ -136,7 +134,7 @@ trait HasCSources extends JavaModule with PublishModule {
         val script =
          s"""@call "$vcvars"
             |if %errorlevel% neq 0 exit /b %errorlevel%
-            |cl /I $q$javaHome0/include$q /I $q$javaHome0/include/win32$q /utf-8 /c $q$f$q
+            |cl /I $q${javaHome0 / "include"}$q /I $q${javaHome0 / "include/win32"}$q /utf-8 /c $q$f$q
             |""".stripMargin
         val scriptPath = T.dest / "run-cl.bat"
         os.write.over(scriptPath, script.getBytes, createFolders = true)
@@ -259,7 +257,9 @@ def publishSonatype(
   pgpPassword: String,
   data: Seq[PublishModule.PublishData],
   timeout: Duration,
-  log: mill.api.Logger
+  log: mill.api.Logger,
+  workspace: os.Path,
+  env: Map[String, String]
 ): Unit = {
 
   val artifacts = data.map {
@@ -282,6 +282,8 @@ def publishSonatype(
        readTimeout = timeout.toMillis.toInt,
     connectTimeout = timeout.toMillis.toInt,
                log = log,
+         workspace = workspace,
+               env = env,
       awaitTimeout = timeout.toMillis.toInt,
     stagingRelease = isRelease
   )

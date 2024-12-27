@@ -1,4 +1,4 @@
-import $file.deps, deps.{Deps, Scala, WindowsJvm}
+import $file.deps, deps.{Deps, Scala}
 import $file.settings, settings.{GenerateHeaders, HasCSources, JniUtilsPublishModule, JniUtilsPublishVersion, WithDllNameJava}
 
 import mill._, scalalib._
@@ -25,6 +25,10 @@ object `windows-jni-utils` extends MavenModule with JniUtilsPublishVersion with 
     if (dir.getName == "jre") dir.getParent
     else value
   }
+
+  def javacOptions = super.javacOptions() ++ Seq(
+    "--release", "8"
+  )
 }
 
 object `windows-jni-utils-graalvm` extends WindowsUtils with JniUtilsPublishModule {
@@ -46,7 +50,7 @@ object `windows-jni-utils-coursierapi` extends WindowsUtils with JniUtilsPublish
 object `windows-jni-utils-tests` extends ScalaModule with JniUtilsPublishModule {
   def scalaVersion = Scala.scala213
   def moduleDeps = Seq(`windows-jni-utils`)
-  object test extends Tests {
+  object test extends ScalaTests {
     def moduleDeps = super.moduleDeps ++ Seq(
       `windows-jni-utils-bootstrap`,
       `windows-jni-utils-lmcoursier`,
@@ -73,12 +77,15 @@ object headers extends Module {
     def cDirectory = `windows-jni-utils`.cDirectory()
   }
 
-  implicit def millModuleBasePath: define.BasePath =
-    define.BasePath(super.millModuleBasePath.value / os.up)
+  implicit def millModuleBasePath: define.Ctx.BasePath =
+    define.Ctx.BasePath(super.millModuleBasePath.value / os.up)
 }
 
 trait WindowsUtils extends MavenModule with JniUtilsPublishVersion {
   def compileIvyDeps = Agg(Deps.svm)
+  def javacOptions = super.javacOptions() ++ Seq(
+    "--release", "8"
+  )
 }
 
 def publishSonatype(tasks: mill.main.Tasks[PublishModule.PublishData]) =
@@ -93,6 +100,8 @@ def publishSonatype(tasks: mill.main.Tasks[PublishModule.PublishData]) =
       pgpPassword = pgpPassword,
       data = data,
       timeout = timeout,
-      log = T.ctx().log
+      log = T.ctx().log,
+      workspace = T.workspace,
+      env = T.env
     )
   }

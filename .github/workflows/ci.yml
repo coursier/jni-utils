@@ -2,7 +2,7 @@ name: CI
 on:
   push:
     branches:
-    - master
+    - main
     tags:
     - "v*"
   pull_request:
@@ -18,7 +18,7 @@ jobs:
     - uses: coursier/cache-action@v6
     - uses: coursier/setup-action@v1
       with:
-        jvm: 8
+        jvm: "zulu:21"
     - name: Compile
       run: ./mill -i __.test.compile
     - name: Test
@@ -38,7 +38,7 @@ jobs:
     - uses: coursier/cache-action@v6
     - uses: coursier/setup-action@v1
       with:
-        jvm: 8
+        jvm: "zulu:21"
     - run: .github/scripts/gpg-setup.sh
       shell: bash
       env:
