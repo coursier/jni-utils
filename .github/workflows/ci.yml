@@ -27,7 +27,6 @@ jobs:
       run: ./mill -i __.publishLocal
 
   publish:
-    needs: test
     if: github.event_name == 'push'
     runs-on: windows-latest
     steps:
