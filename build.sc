@@ -25,6 +25,10 @@ object `windows-jni-utils` extends MavenModule with JniUtilsPublishVersion with 
     if (dir.getName == "jre") dir.getParent
     else value
   }
+
+  def javacOptions = super.javacOptions() ++ Seq(
+    "--release", "8"
+  )
 }
 
 object `windows-jni-utils-graalvm` extends WindowsUtils with JniUtilsPublishModule {
@@ -79,6 +83,9 @@ object headers extends Module {
 
 trait WindowsUtils extends MavenModule with JniUtilsPublishVersion {
   def compileIvyDeps = Agg(Deps.svm)
+  def javacOptions = super.javacOptions() ++ Seq(
+    "--release", "8"
+  )
 }
 
 def publishSonatype(tasks: mill.main.Tasks[PublishModule.PublishData]) =
