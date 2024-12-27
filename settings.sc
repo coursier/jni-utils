@@ -123,7 +123,7 @@ trait HasCSources extends JavaModule with PublishModule {
       else
         Nil
     }
-    val javaHome0 = windowsJavaHome()
+    val javaHome0 = os.Path(windowsJavaHome())
     for (f <- cFiles) yield {
       if (!os.exists(destDir))
         os.makeDir.all(destDir)
@@ -134,7 +134,7 @@ trait HasCSources extends JavaModule with PublishModule {
         val script =
          s"""@call "$vcvars"
             |if %errorlevel% neq 0 exit /b %errorlevel%
-            |cl /I $q$javaHome0/include$q /I $q$javaHome0/include/win32$q /utf-8 /c $q$f$q
+            |cl /I $q${javaHome0 / "include"}$q /I $q${javaHome0 / "include/win32"}$q /utf-8 /c $q$f$q
             |""".stripMargin
         val scriptPath = T.dest / "run-cl.bat"
         os.write.over(scriptPath, script.getBytes, createFolders = true)
