@@ -46,7 +46,7 @@ object `windows-jni-utils-coursierapi` extends WindowsUtils with JniUtilsPublish
 object `windows-jni-utils-tests` extends ScalaModule with JniUtilsPublishModule {
   def scalaVersion = Scala.scala213
   def moduleDeps = Seq(`windows-jni-utils`)
-  object test extends Tests {
+  object test extends ScalaTests {
     def moduleDeps = super.moduleDeps ++ Seq(
       `windows-jni-utils-bootstrap`,
       `windows-jni-utils-lmcoursier`,
@@ -73,8 +73,8 @@ object headers extends Module {
     def cDirectory = `windows-jni-utils`.cDirectory()
   }
 
-  implicit def millModuleBasePath: define.BasePath =
-    define.BasePath(super.millModuleBasePath.value / os.up)
+  implicit def millModuleBasePath: define.Ctx.BasePath =
+    define.Ctx.BasePath(super.millModuleBasePath.value / os.up)
 }
 
 trait WindowsUtils extends MavenModule with JniUtilsPublishVersion {
@@ -93,6 +93,8 @@ def publishSonatype(tasks: mill.main.Tasks[PublishModule.PublishData]) =
       pgpPassword = pgpPassword,
       data = data,
       timeout = timeout,
-      log = T.ctx().log
+      log = T.ctx().log,
+      workspace = T.workspace,
+      env = T.env
     )
   }

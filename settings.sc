@@ -1,4 +1,4 @@
-import $ivy.`de.tototec::de.tobiasroeser.mill.vcs.version_mill0.9:0.1.1`
+import $ivy.`de.tototec::de.tobiasroeser.mill.vcs.version::0.4.1`
 import $ivy.`org.codehaus.plexus:plexus-archiver:4.2.2`
 
 import de.tobiasroeser.mill.vcs.version.VcsVersion
@@ -259,7 +259,9 @@ def publishSonatype(
   pgpPassword: String,
   data: Seq[PublishModule.PublishData],
   timeout: Duration,
-  log: mill.api.Logger
+  log: mill.api.Logger,
+  workspace: os.Path,
+  env: Map[String, String]
 ): Unit = {
 
   val artifacts = data.map {
@@ -282,6 +284,8 @@ def publishSonatype(
        readTimeout = timeout.toMillis.toInt,
     connectTimeout = timeout.toMillis.toInt,
                log = log,
+         workspace = workspace,
+               env = env,
       awaitTimeout = timeout.toMillis.toInt,
     stagingRelease = isRelease
   )
