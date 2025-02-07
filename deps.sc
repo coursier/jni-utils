@@ -6,5 +6,5 @@ object Deps {
 }
 
 object Scala {
-  def scala213 = "2.13.15"
+  def scala213 = "2.13.16"
 }
