@@ -2,7 +2,7 @@ import mill._, scalalib._
 
 object Deps {
   def svm = ivy"org.graalvm.nativeimage:svm:24.2.1"
-  def utest = ivy"com.lihaoyi::utest:0.8.5"
+  def utest = ivy"com.lihaoyi::utest:0.8.9"
 }
 
 object Scala {
