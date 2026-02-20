@@ -11,11 +11,11 @@ jobs:
   test:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
         submodules: true
-    - uses: coursier/cache-action@v6
+    - uses: coursier/cache-action@v8
     - uses: coursier/setup-action@v1
       with:
         jvm: "zulu:21"
@@ -30,11 +30,11 @@ jobs:
     if: github.event_name == 'push'
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
         submodules: true
-    - uses: coursier/cache-action@v6
+    - uses: coursier/cache-action@v8
     - uses: coursier/setup-action@v1
       with:
         jvm: "zulu:21"
