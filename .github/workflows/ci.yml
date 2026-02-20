@@ -16,7 +16,7 @@ jobs:
         fetch-depth: 0
         submodules: true
     - uses: coursier/cache-action@v8
-    - uses: coursier/setup-action@v1
+    - uses: coursier/setup-action@v2
       with:
         jvm: "zulu:21"
     - name: Compile
@@ -35,7 +35,7 @@ jobs:
         fetch-depth: 0
         submodules: true
     - uses: coursier/cache-action@v8
-    - uses: coursier/setup-action@v1
+    - uses: coursier/setup-action@v2
       with:
         jvm: "zulu:21"
     - run: .github/scripts/gpg-setup.sh
