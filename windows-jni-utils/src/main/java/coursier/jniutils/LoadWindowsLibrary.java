@@ -6,6 +6,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
+import java.util.Locale;
 
 public final class LoadWindowsLibrary {
 
@@ -88,8 +89,16 @@ public final class LoadWindowsLibrary {
     final static String dllName() {
         return DllName.name;
     }
+    final static boolean isArm64() {
+        String arch = System.getProperty("os.arch");
+        if (arch == null)
+            return false;
+        arch = arch.toLowerCase(Locale.ROOT);
+        return arch.equals("aarch64") || arch.equals("arm64");
+    }
     final static String dllResourcePath() {
-        return "META-INF/native/windows64/" + dllName() + ".dll";
+        String archDir = isArm64() ? "windows64-arm64" : "windows64";
+        return "META-INF/native/" + archDir + "/" + dllName() + ".dll";
     }
 
 }
