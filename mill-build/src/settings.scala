@@ -73,7 +73,7 @@ def toCrLfOpt(content: Array[Byte]): Option[Array[Byte]] = {
   }
 }
 
-private def vcVersions = Seq("2022", "2019", "2017")
+private def vcVersions = Seq("18", "2022", "2019", "2017")
 private def vcEditions = Seq("Enterprise", "Community", "BuildTools")
 private def progFiles = Seq(
   """C:\Program Files""",
