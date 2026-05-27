@@ -75,6 +75,17 @@ def toCrLfOpt(content: Array[Byte]): Option[Array[Byte]] = {
 
 private def vcVersions = Seq("18", "2022", "2019", "2017")
 private def vcEditions = Seq("Enterprise", "Community", "BuildTools")
+private def isArm64: Boolean =
+  sys.props.get("os.arch").map(_.toLowerCase(java.util.Locale.ROOT)).exists {
+    case "aarch64" | "arm64" => true
+    case _ => false
+  }
+private def windowsNativeResourceDir =
+  if (isArm64) "windows64-arm64" else "windows64"
+private def windowsClassifier =
+  if (isArm64) "arm64-pc-win32" else "x86_64-pc-win32"
+private def vcvarsBat =
+  if (isArm64) "vcvarsarm64.bat" else "vcvars64.bat"
 private def progFiles = Seq(
   """C:\Program Files""",
   """C:\Program Files (x86)"""
@@ -84,7 +95,7 @@ private lazy val vcvarsCandidates = Option(System.getenv("VCVARSALL")) ++ {
     progFiles0 <- progFiles
     version <- vcVersions
     edition <- vcEditions
-  } yield progFiles0 + """\Microsoft Visual Studio\""" + version + "\\" + edition + """\VC\Auxiliary\Build\vcvars64.bat"""
+  } yield progFiles0 + """\Microsoft Visual Studio\""" + version + "\\" + edition + """\VC\Auxiliary\Build\""" + vcvarsBat
 }
 
 private def vcvarsOpt: Option[os.Path] =
@@ -94,7 +105,7 @@ private def vcvarsOpt: Option[os.Path] =
     .find(os.exists)
 
 private lazy val vcvars = vcvarsOpt.getOrElse {
-  sys.error("vcvars64.bat not found. Ensure Visual Studio is installed, or put the vcvars64.bat path in VCVARSALL.")
+  sys.error(s"$vcvarsBat not found. Ensure Visual Studio is installed, or put the $vcvarsBat path in VCVARSALL.")
 }
 
 private def q = "\""
@@ -185,7 +196,7 @@ trait HasCSources extends JavaModule with PublishModule {
   def resources = Task {
     val dll0 = dll().path
     val dir = Task.dest / "dll-resources"
-    val dllDir = dir / "META-INF/native/windows64"
+    val dllDir = dir / "META-INF/native" / windowsNativeResourceDir
     os.copy(dll0, dllDir / dll0.last, replaceExisting = true, createFolders = true)
     super.resources() ++ Seq(PathRef(dir))
   }
@@ -194,14 +205,14 @@ trait HasCSources extends JavaModule with PublishModule {
     PublishInfo(
       file = dll(),
       ivyConfig = "compile",
-      classifier = Some("x86_64-pc-win32"),
+      classifier = Some(windowsClassifier),
       ext = "dll",
       ivyType = "dll"
     ),
     PublishInfo(
       file = cLib(),
       ivyConfig = "compile",
-      classifier = Some("x86_64-pc-win32"),
+      classifier = Some(windowsClassifier),
       ext = "lib",
       ivyType = "lib"
     )
