@@ -6,6 +6,10 @@ import mill.*, scalalib.*
 import millbuild.*
 
 import scala.concurrent.duration.*
+import java.io.{FileInputStream, FileOutputStream}
+import java.security.MessageDigest
+import java.util.zip.{ZipEntry, ZipInputStream, ZipOutputStream}
+import scala.jdk.CollectionConverters.*
 
 object `windows-jni-utils` extends MavenModule with JniUtilsPublishVersion with HasCSources with JniUtilsPublishModule with WithDllNameJava {
   def linkingLibs = Seq("ole32", "shell32", "advapi32", "kernel32")
@@ -108,4 +112,158 @@ trait WindowsUtils extends MavenModule with JniUtilsPublishVersion {
   def javacOptions = super.javacOptions() ++ Seq(
     "--release", "8"
   )
+}
+
+object ci extends Module {
+
+  private def ensureCleanDir(dir: os.Path): Unit = {
+    if (os.exists(dir)) os.remove.all(dir)
+    os.makeDir.all(dir)
+  }
+
+  private def zipDir(dir: os.Path, output: os.Path): Unit = {
+    if (os.exists(output)) os.remove(output)
+    os.makeDir.all(output / os.up)
+    val buffer = Array.ofDim[Byte](64 * 1024)
+    val base = dir.toNIO
+    val zos = new ZipOutputStream(new FileOutputStream(output.toIO))
+    try {
+      for (path <- os.walk(dir) if os.isFile(path)) {
+        val name = base.relativize(path.toNIO).iterator().asScala.mkString("/")
+        zos.putNextEntry(new ZipEntry(name))
+        val is = new FileInputStream(path.toIO)
+        try {
+          var read = is.read(buffer)
+          while (read >= 0) {
+            if (read > 0) zos.write(buffer, 0, read)
+            read = is.read(buffer)
+          }
+        } finally is.close()
+        zos.closeEntry()
+      }
+    } finally zos.close()
+  }
+
+  private def unzip(zip: os.Path, dest: os.Path): Unit = {
+    os.makeDir.all(dest)
+    val buffer = Array.ofDim[Byte](64 * 1024)
+    val zis = new ZipInputStream(new FileInputStream(zip.toIO))
+    try {
+      var entry = zis.getNextEntry()
+      while (entry != null) {
+        val outPath = dest / os.SubPath(entry.getName)
+        if (entry.isDirectory) os.makeDir.all(outPath)
+        else {
+          os.makeDir.all(outPath / os.up)
+          val os0 = new FileOutputStream(outPath.toIO)
+          try {
+            var read = zis.read(buffer)
+            while (read >= 0) {
+              if (read > 0) os0.write(buffer, 0, read)
+              read = zis.read(buffer)
+            }
+          } finally os0.close()
+        }
+        zis.closeEntry()
+        entry = zis.getNextEntry()
+      }
+    } finally zis.close()
+  }
+
+  private def hexDigest(path: os.Path, algorithm: String): String = {
+    val digest = MessageDigest.getInstance(algorithm)
+    val is = new FileInputStream(path.toIO)
+    val buffer = Array.ofDim[Byte](64 * 1024)
+    try {
+      var read = is.read(buffer)
+      while (read >= 0) {
+        if (read > 0) digest.update(buffer, 0, read)
+        read = is.read(buffer)
+      }
+    } finally is.close()
+    digest.digest().map(b => "%02x".format(b & 0xff)).mkString
+  }
+
+  def collectWindowsArm64NativeArtifacts(outputDir: String) = Task.Command {
+    val dir = os.Path(outputDir, os.pwd)
+    ensureCleanDir(dir)
+    os.copy(`windows-jni-utils`.dll().path, dir / "csjniutils.dll", replaceExisting = true)
+    os.copy(`windows-jni-utils`.cLib().path, dir / "csjniutils.lib", replaceExisting = true)
+    PathRef(dir)
+  }
+
+  def packageLocalM2(m2RepoPath: String, outputZip: String) = Task.Command {
+    val repo = os.Path(m2RepoPath, os.pwd)
+    val zip = os.Path(outputZip, os.pwd)
+    ensureCleanDir(repo)
+    `windows-jni-utils`.publishM2Local(m2RepoPath = m2RepoPath)()
+    `windows-jni-utils-graalvm`.publishM2Local(m2RepoPath = m2RepoPath)()
+    `windows-jni-utils-bootstrap`.publishM2Local(m2RepoPath = m2RepoPath)()
+    `windows-jni-utils-lmcoursier`.publishM2Local(m2RepoPath = m2RepoPath)()
+    `windows-jni-utils-coursierapi`.publishM2Local(m2RepoPath = m2RepoPath)()
+    `windows-jni-utils-tests`.publishM2Local(m2RepoPath = m2RepoPath)()
+    zipDir(repo, zip)
+    PathRef(zip)
+  }
+
+  def installLocalM2(inputZip: String, m2RepoPath: String) = Task.Command {
+    val zip = os.Path(inputZip, os.pwd)
+    val repo = os.Path(m2RepoPath, os.pwd)
+    unzip(zip, repo)
+    PathRef(repo)
+  }
+
+  def publishLocalM2Contents(inputZip: String) = Task.Command {
+    val repo = Task.dest / "m2-repository"
+    val bundleRoot = Task.dest / "central-bundle"
+    val bundle = Task.dest / "central-bundle.zip"
+    unzip(os.Path(inputZip, os.pwd), repo)
+    ensureCleanDir(bundleRoot)
+    os.copy(repo / "io", bundleRoot / "io", mergeFolders = true)
+
+    for {
+      path <- os.walk(bundleRoot) if os.isFile(path)
+      name = path.last
+      if name == "maven-metadata-local.xml" ||
+        name == "_remote.repositories" ||
+        name == "resolver-status.properties" ||
+        name.endsWith(".lastUpdated")
+    } os.remove(path)
+
+    val secretBase64 = sys.env.getOrElse("MILL_PGP_SECRET_BASE64", sys.error("MILL_PGP_SECRET_BASE64 not set"))
+    val passphrase = sys.env.getOrElse("MILL_PGP_PASSPHRASE", sys.error("MILL_PGP_PASSPHRASE not set"))
+    val username = sys.env.getOrElse("MILL_SONATYPE_USERNAME", sys.error("MILL_SONATYPE_USERNAME not set"))
+    val password = sys.env.getOrElse("MILL_SONATYPE_PASSWORD", sys.error("MILL_SONATYPE_PASSWORD not set"))
+
+    val keyPath = Task.dest / "publish-key.asc"
+    os.write.over(keyPath, java.util.Base64.getDecoder.decode(secretBase64))
+    os.proc("gpg", "--batch", "--import", keyPath).call(stdout = os.Inherit, stderr = os.Inherit)
+
+    for (file <- os.walk(bundleRoot) if os.isFile(file) && !Set("asc", "md5", "sha1")(file.ext)) {
+      os.proc(
+        "gpg", "--batch", "--yes", "--pinentry-mode", "loopback", "--passphrase", passphrase,
+        "--armor", "--detach-sign", file
+      ).call(stdout = os.Inherit, stderr = os.Inherit)
+      os.write.over(file / os.up / s"${file.last}.md5", hexDigest(file, "MD5"))
+      os.write.over(file / os.up / s"${file.last}.sha1", hexDigest(file, "SHA-1"))
+    }
+
+    zipDir(bundleRoot, bundle)
+    val token = java.util.Base64.getEncoder.encodeToString(
+      s"$username:$password".getBytes(java.nio.charset.StandardCharsets.UTF_8)
+    )
+    val deploymentName = Seq(
+      "jni-utils",
+      sys.env.getOrElse("GITHUB_REF_NAME", "local"),
+      sys.env.getOrElse("GITHUB_SHA", "unknown")
+    ).mkString("-")
+    val uri =
+      s"https://central.sonatype.com/api/v1/publisher/upload?name=$deploymentName&publishingType=AUTOMATIC"
+    os.proc(
+      "curl.exe", "--fail-with-body",
+      "--header", s"Authorization: Bearer $token",
+      "--form", s"bundle=@$bundle;type=application/octet-stream",
+      uri
+    ).call(stdout = os.Inherit, stderr = os.Inherit)
+  }
 }

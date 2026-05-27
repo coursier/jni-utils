@@ -31,15 +31,8 @@ jobs:
         fetch-depth: 0
         submodules: true
     - uses: coursier/cache-action@v8
-    - name: Build native artifacts
-      run: ./mill -i windows-jni-utils.dll windows-jni-utils.cLib
     - name: Collect native artifacts
-      shell: pwsh
-      run: |
-        $artifactDir = Join-Path $env:RUNNER_TEMP "windows-arm64-native"
-        New-Item -ItemType Directory -Force $artifactDir | Out-Null
-        Copy-Item ".container/out/windows-jni-utils/dll.dest/dlls/csjniutils.dll" $artifactDir
-        Copy-Item ".container/out/windows-jni-utils/cLib.dest/csjniutils.lib" $artifactDir
+      run: ./mill -i ci.collectWindowsArm64NativeArtifacts --output-dir "${{ runner.temp }}/windows-arm64-native"
     - uses: actions/upload-artifact@v4
       with:
         name: windows-arm64-native
@@ -60,13 +53,12 @@ jobs:
         name: windows-arm64-native
         path: ${{ runner.temp }}/windows-arm64-native
     - name: Publish to temporary Maven repo
-      shell: pwsh
       env:
         JNI_UTILS_WINDOWS_ARM64_ARTIFACTS_DIR: ${{ runner.temp }}/windows-arm64-native
-      run: |
-        $repo = Join-Path $env:RUNNER_TEMP "m2-repository"
-        ./mill -i __.publishM2Local --m-2-repo-path $repo
-        Compress-Archive -Path "$repo\*" -DestinationPath "$env:RUNNER_TEMP\jni-utils-m2-repository.zip" -Force
+      run: >-
+        ./mill -i ci.packageLocalM2
+        --m-2-repo-path "${{ runner.temp }}/m2-repository"
+        --output-zip "${{ runner.temp }}/jni-utils-m2-repository.zip"
     - uses: actions/upload-artifact@v4
       with:
         name: jni-utils-m2-repository
@@ -93,11 +85,10 @@ jobs:
         name: jni-utils-m2-repository
         path: ${{ runner.temp }}
     - name: Install local Maven repo
-      shell: pwsh
-      run: |
-        $repo = Join-Path $HOME ".m2\repository"
-        New-Item -ItemType Directory -Force $repo | Out-Null
-        Expand-Archive -Path "$env:RUNNER_TEMP\jni-utils-m2-repository.zip" -DestinationPath $repo -Force
+      run: >-
+        ./mill -i ci.installLocalM2
+        --input-zip "${{ runner.temp }}/jni-utils-m2-repository.zip"
+        --m-2-repo-path "$HOME/.m2/repository"
     - name: Test published JAR
       run: ./mill -i windows-jni-utils-published-tests.test
 
@@ -106,51 +97,19 @@ jobs:
     needs: test-published
     runs-on: windows-latest
     steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+        submodules: true
+    - uses: coursier/cache-action@v8
     - uses: actions/download-artifact@v4
       with:
         name: jni-utils-m2-repository
         path: ${{ runner.temp }}
     - name: Publish local Maven repo contents
-      shell: pwsh
       env:
         MILL_PGP_SECRET_BASE64: ${{ secrets.PUBLISH_SECRET_KEY }}
         MILL_PGP_PASSPHRASE: ${{ secrets.PUBLISH_SECRET_KEY_PASSWORD }}
         MILL_SONATYPE_USERNAME: ${{ secrets.PUBLISH_USER }}
         MILL_SONATYPE_PASSWORD: ${{ secrets.PUBLISH_PASSWORD }}
-      run: |
-        $repo = Join-Path $env:RUNNER_TEMP "m2-repository"
-        $bundleRoot = Join-Path $env:RUNNER_TEMP "central-bundle"
-        $bundle = Join-Path $env:RUNNER_TEMP "central-bundle.zip"
-        Expand-Archive -Path "$env:RUNNER_TEMP\jni-utils-m2-repository.zip" -DestinationPath $repo -Force
-        New-Item -ItemType Directory -Force $bundleRoot | Out-Null
-        Copy-Item (Join-Path $repo "io") $bundleRoot -Recurse
-
-        Get-ChildItem $bundleRoot -Recurse -File -Include `
-          "maven-metadata-local.xml", "_remote.repositories", "resolver-status.properties", "*.lastUpdated" |
-          Remove-Item -Force
-
-        $keyPath = Join-Path $env:RUNNER_TEMP "publish-key.asc"
-        [IO.File]::WriteAllBytes($keyPath, [Convert]::FromBase64String($env:MILL_PGP_SECRET_BASE64))
-        gpg --batch --import $keyPath
-
-        $files = Get-ChildItem $bundleRoot -Recurse -File |
-          Where-Object { $_.Extension -notin ".asc", ".md5", ".sha1" }
-        foreach ($file in $files) {
-          gpg --batch --yes --pinentry-mode loopback --passphrase "$env:MILL_PGP_PASSPHRASE" `
-            --armor --detach-sign $file.FullName
-          (Get-FileHash $file.FullName -Algorithm MD5).Hash.ToLowerInvariant() |
-            Set-Content -NoNewline -Encoding ascii "$($file.FullName).md5"
-          (Get-FileHash $file.FullName -Algorithm SHA1).Hash.ToLowerInvariant() |
-            Set-Content -NoNewline -Encoding ascii "$($file.FullName).sha1"
-        }
-
-        Compress-Archive -Path "$bundleRoot\*" -DestinationPath $bundle -Force
-        $token = [Convert]::ToBase64String(
-          [Text.Encoding]::UTF8.GetBytes("$env:MILL_SONATYPE_USERNAME`:$env:MILL_SONATYPE_PASSWORD")
-        )
-        $deploymentName = "jni-utils-${{ github.ref_name }}-${{ github.sha }}"
-        $uri = "https://central.sonatype.com/api/v1/publisher/upload?name=$deploymentName&publishingType=AUTOMATIC"
-        curl.exe --fail-with-body `
-          --header "Authorization: Bearer $token" `
-          --form "bundle=@$bundle;type=application/octet-stream" `
-          $uri
+      run: ./mill -i ci.publishLocalM2Contents --input-zip "${{ runner.temp }}/jni-utils-m2-repository.zip"
