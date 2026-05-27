@@ -2,15 +2,74 @@ package millbuild
 
 import mill.*, scalalib.*
 import mill.scalalib.publish.PublishInfo
+import mill.util.VcsVersion
+import org.codehaus.plexus.archiver.zip.ZipUnArchiver
 
 trait GenerateHeaders extends JavaModule {
-  def cDirectory = Task {
-    moduleDir / "src" / "main" / "c"
+  def cDirectory = Task.Source("src/main/c")
+  def javacOptions = Task{
+    val dest = cDirectory().path
+    Seq("-h", dest.toNIO.toAbsolutePath.toString)
   }
-  def cSources = Task.Sources(moduleDir / "src" / "main" / "c")
-  abstract override def javacOptions = Task {
-    val dest = cDirectory()
-    super.javacOptions() ++ Seq("-h", dest.toNIO.toAbsolutePath.toString)
+  def compile = Task {
+    val res = super.compile()
+    val dir = cDirectory().path
+    val headerFiles = Seq(dir).flatMap { dir =>
+      if (os.isDir(dir))
+        os.walk(dir)
+          .filter(p => os.isFile(p) && p.last.endsWith(".h"))
+      else
+        Nil
+    }
+    for (f <- headerFiles) {
+      val content = os.read.bytes(f)
+      for (updatedContent <- toCrLfOpt(content))
+        os.write.over(f, updatedContent)
+    }
+    res
+  }
+}
+
+def toCrLfOpt(content: Array[Byte]): Option[Array[Byte]] = {
+  val cr = '\r'.toByte
+  val lf = '\n'.toByte
+  val indices = content
+    .iterator
+    .zipWithIndex
+    .collect {
+      case (`lf`, idx) if idx > 0 && content(idx - 1) != cr => idx
+    }
+    .toVector
+  if (indices.isEmpty)
+    None
+  else {
+    val updatedContent = Array.ofDim[Byte](content.length + indices.length)
+    var i = 0 // content index
+    var j = 0 // updatedContent index
+    var n = 0 // indices index
+    while (n < indices.length) {
+      val idx = indices(n)
+
+      System.arraycopy(content, i, updatedContent, j, idx - i)
+      j += idx - i
+      i = idx
+
+      updatedContent(j) = cr
+      updatedContent(j + 1) = lf
+      i += 1
+      j += 2
+
+      n += 1
+    }
+
+    val idx = content.length
+    System.arraycopy(content, i, updatedContent, j, content.length - i)
+    j += idx - i
+    i = idx
+
+    assert(i == content.length)
+    assert(j == updatedContent.length)
+    Some(updatedContent)
   }
 }
 
@@ -45,10 +104,9 @@ trait HasCSources extends JavaModule with PublishModule {
   def windowsJavaHome: T[String]
   def dllName: T[String]
 
-  def linkingLibs = Task { Seq.empty[String] }
+  def linkingLibs = Task(Seq.empty[String])
 
-  def cSources = Task.Sources(moduleDir / "src" / "main" / "c")
-
+  def cSources = Task.Sources("src/main/c")
   def cCompile = Task(persistent = true) {
     val destDir = Task.dest / "obj"
     val cFiles = cSources().flatMap { dir =>
@@ -124,15 +182,15 @@ trait HasCSources extends JavaModule with PublishModule {
     }
     PathRef(dest)
   }
-  override def resources = Task {
+  def resources = Task {
     val dll0 = dll().path
     val dir = Task.dest / "dll-resources"
-    val dllDir = dir / "META-INF" / "native" / "windows64"
+    val dllDir = dir / "META-INF/native/windows64"
     os.copy(dll0, dllDir / dll0.last, replaceExisting = true, createFolders = true)
     super.resources() ++ Seq(PathRef(dir))
   }
 
-  override def extraPublish = super.extraPublish() ++ Seq(
+  def extraPublish = super.extraPublish() ++ Seq(
     PublishInfo(
       file = dll(),
       ivyConfig = "compile",
@@ -152,7 +210,7 @@ trait HasCSources extends JavaModule with PublishModule {
 
 trait JniUtilsPublishVersion extends Module {
   def publishVersion = Task {
-    val state = VcsState(Task.ctx().workspace)
+    val state = VcsVersion.vcsState()
     if (state.commitsSinceLastTag > 0) {
       val versionOrEmpty = state.lastTag
         .map(_.stripPrefix("v"))
@@ -164,48 +222,18 @@ trait JniUtilsPublishVersion extends Module {
         .getOrElse("0.0.1-SNAPSHOT")
       Some(versionOrEmpty)
         .filter(_.nonEmpty)
-        .getOrElse(state.formatted)
+        .getOrElse(state.format())
     } else
       state
         .lastTag
-        .getOrElse(state.formatted)
+        .getOrElse(state.format())
         .stripPrefix("v")
   }
 }
 
-private case class VcsState(lastTag: Option[String], commitsSinceLastTag: Int, dirty: Boolean) {
-  def formatted: String = {
-    val tagPart = lastTag.getOrElse("0.0.0")
-    val commitsPart = if (commitsSinceLastTag > 0) s"-$commitsSinceLastTag" else ""
-    val dirtyPart = if (dirty) "-DIRTY" else ""
-    tagPart + commitsPart + dirtyPart
-  }
-}
-
-private object VcsState {
-  def apply(workspace: os.Path): VcsState = {
-    def git(args: String*): Option[String] = {
-      val result = os.proc("git", args).call(cwd = workspace, check = false, stderr = os.Pipe)
-      if (result.exitCode == 0)
-        Some(result.out.text().trim).filter(_.nonEmpty)
-      else
-        None
-    }
-
-    val lastTag = git("describe", "--tags", "--abbrev=0")
-    val commitsSinceLastTag = lastTag
-      .flatMap(tag => git("rev-list", "--count", s"$tag..HEAD"))
-      .flatMap(s => scala.util.Try(s.toInt).toOption)
-      .orElse(git("rev-list", "--count", "HEAD").flatMap(s => scala.util.Try(s.toInt).toOption))
-      .getOrElse(0)
-    val dirty = git("status", "--porcelain").exists(_.nonEmpty)
-    VcsState(lastTag, commitsSinceLastTag, dirty)
-  }
-}
-
 trait JniUtilsPublishModule extends PublishModule with JniUtilsPublishVersion {
-  import mill.scalalib.publish.*
-  override def pomSettings = PomSettings(
+  import mill.scalalib.publish._
+  def pomSettings = PomSettings(
     description = artifactName(),
     organization = "io.get-coursier.jniutils",
     url = "https://github.com/coursier/jni-utils",
@@ -218,8 +246,8 @@ trait JniUtilsPublishModule extends PublishModule with JniUtilsPublishVersion {
 }
 
 trait WithDllNameJava extends JavaModule {
-  override def generatedSources = Task {
-    val f = Task.dest / "coursier" / "jniutils" / "DllName.java"
+  def generatedSources = Task {
+    val f = Task.dest / "coursier/jniutils/DllName.java"
     val dllName0 = dllName()
     val content =
      s"""package coursier.jniutils;
