@@ -7,7 +7,7 @@ import org.codehaus.plexus.archiver.zip.ZipUnArchiver
 
 trait GenerateHeaders extends JavaModule {
   def cDirectory = Task.Source("src/main/c")
-  def javacOptions = Task{
+  override def javacOptions = Task{
     val dest = cDirectory().path
     Seq("-h", dest.toNIO.toAbsolutePath.toString)
   }
@@ -84,6 +84,10 @@ private def windowsNativeResourceDir =
   if (isArm64) "windows64-arm64" else "windows64"
 private def windowsClassifier =
   if (isArm64) "arm64-pc-win32" else "x86_64-pc-win32"
+private def windowsArm64Classifier = "arm64-pc-win32"
+private def windowsArm64NativeResourceDir = "windows64-arm64"
+private def windowsArm64ArtifactsDirOpt: Option[os.Path] =
+  sys.env.get("JNI_UTILS_WINDOWS_ARM64_ARTIFACTS_DIR").filter(_.nonEmpty).map(os.Path(_, os.pwd))
 private def vcvarsBat =
   if (isArm64) "vcvarsarm64.bat" else "vcvars64.bat"
 private def progFiles = Seq(
@@ -193,11 +197,27 @@ trait HasCSources extends JavaModule with PublishModule {
     }
     PathRef(dest)
   }
-  def resources = Task {
+  def windowsArm64DllArtifact = Task {
+    windowsArm64ArtifactsDirOpt
+      .map(_ / s"${dllName()}.dll")
+      .filter(os.isFile)
+      .map(PathRef(_))
+  }
+  def windowsArm64CLibArtifact = Task {
+    windowsArm64ArtifactsDirOpt
+      .map(_ / "csjniutils.lib")
+      .filter(os.isFile)
+      .map(PathRef(_))
+  }
+  override def resources = Task {
     val dll0 = dll().path
     val dir = Task.dest / "dll-resources"
     val dllDir = dir / "META-INF/native" / windowsNativeResourceDir
     os.copy(dll0, dllDir / dll0.last, replaceExisting = true, createFolders = true)
+    for (arm64Dll <- windowsArm64DllArtifact()) {
+      val arm64DllDir = dir / "META-INF/native" / windowsArm64NativeResourceDir
+      os.copy(arm64Dll.path, arm64DllDir / arm64Dll.path.last, replaceExisting = true, createFolders = true)
+    }
     super.resources() ++ Seq(PathRef(dir))
   }
 
@@ -216,7 +236,23 @@ trait HasCSources extends JavaModule with PublishModule {
       ext = "lib",
       ivyType = "lib"
     )
-  )
+  ) ++ windowsArm64DllArtifact().map { f =>
+    PublishInfo(
+      file = f,
+      ivyConfig = "compile",
+      classifier = Some(windowsArm64Classifier),
+      ext = "dll",
+      ivyType = "dll"
+    )
+  } ++ windowsArm64CLibArtifact().map { f =>
+    PublishInfo(
+      file = f,
+      ivyConfig = "compile",
+      classifier = Some(windowsArm64Classifier),
+      ext = "lib",
+      ivyType = "lib"
+    )
+  }
 }
 
 trait JniUtilsPublishVersion extends Module {
