@@ -10,7 +10,7 @@ import scala.concurrent.duration.*
 object `windows-jni-utils` extends MavenModule with JniUtilsPublishVersion with HasCSources with JniUtilsPublishModule with WithDllNameJava {
   def linkingLibs = Seq("ole32", "shell32", "advapi32", "kernel32")
 
-  override def compile = Task {
+  def compile = Task {
     headers.`windows-jni-utils`.compile()
     headers.`windows-jni-utils-bootstrap`.compile()
     headers.`windows-jni-utils-lmcoursier`.compile()
@@ -27,7 +27,7 @@ object `windows-jni-utils` extends MavenModule with JniUtilsPublishVersion with 
     else value
   }
 
-  override def javacOptions = super.javacOptions() ++ Seq(
+  def javacOptions = super.javacOptions() ++ Seq(
     "--release", "8"
   )
 }
@@ -83,25 +83,7 @@ object headers extends Module {
 
 trait WindowsUtils extends MavenModule with JniUtilsPublishVersion {
   def compileMvnDeps = Seq(Deps.svm)
-  override def javacOptions = super.javacOptions() ++ Seq(
+  def javacOptions = super.javacOptions() ++ Seq(
     "--release", "8"
   )
 }
-
-def publishSonatype(tasks: mill.util.Tasks[PublishModule.PublishData]) =
-  Task.Command {
-    val timeout = 10.minutes
-    val credentials = sys.env("SONATYPE_USERNAME") + ":" + sys.env("SONATYPE_PASSWORD")
-    val pgpPassword = sys.env("PGP_PASSWORD")
-    val data = Task.sequence(tasks.value)()
-
-    publishSonatypeImpl(
-      credentials = credentials,
-      pgpPassword = pgpPassword,
-      data = data,
-      timeout = timeout,
-      log = Task.log,
-      workspace = Task.ctx().workspace,
-      env = Task.env
-    )
-  }

@@ -8,6 +8,20 @@ on:
   pull_request:
 
 jobs:
+  checks:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+        submodules: true
+    - uses: coursier/cache-action@v8
+    - name: Empty sources, orphan sources, missing test classes checks
+      run: ./mill -i --import io.github.alexarchambault.mill::mill-checks:0.1.2 io.github.alexarchambault.millchecks.MillChecks/allChecks
+      env:
+        MILL_CHECKS_ORPHAN_SOURCES_IGNORE: >-
+          mill-build
+
   test:
     runs-on: windows-latest
     steps:
@@ -16,9 +30,6 @@ jobs:
         fetch-depth: 0
         submodules: true
     - uses: coursier/cache-action@v8
-    - uses: coursier/setup-action@v3
-      with:
-        jvm: "zulu:21"
     - name: Compile
       run: ./mill -i __.test.compile
     - name: Test
@@ -38,13 +49,10 @@ jobs:
     - uses: coursier/setup-action@v3
       with:
         jvm: "zulu:21"
-    - run: .github/scripts/gpg-setup.sh
-      shell: bash
-      env:
-        PGP_SECRET: ${{ secrets.PUBLISH_SECRET_KEY }}
     - name: Release
-      run: ./mill -i publishSonatype --tasks __.publishArtifacts
+      run: ./mill -i mill.scalalib.SonatypeCentralPublishModule/
       env:
-        PGP_PASSWORD: ${{ secrets.PUBLISH_SECRET_KEY_PASSWORD }}
-        SONATYPE_USERNAME: ${{ secrets.PUBLISH_USER }}
-        SONATYPE_PASSWORD: ${{ secrets.PUBLISH_PASSWORD }}
+        MILL_PGP_SECRET_BASE64: ${{ secrets.PUBLISH_SECRET_KEY }}
+        MILL_PGP_PASSPHRASE: ${{ secrets.PUBLISH_SECRET_KEY_PASSWORD }}
+        MILL_SONATYPE_USERNAME: ${{ secrets.PUBLISH_USER }}
+        MILL_SONATYPE_PASSWORD: ${{ secrets.PUBLISH_PASSWORD }}
