@@ -1,0 +1,10 @@
+import mill.*
+import mill.meta.MillBuildRootModule
+import mill.scalalib.*
+
+object `package` extends MillBuildRootModule {
+  def mvnDeps = Seq(
+    mvn"org.codehaus.plexus:plexus-archiver:4.11.0",
+    mvn"org.codehaus.plexus:plexus-container-default:2.1.1"
+  )
+}

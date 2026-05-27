@@ -1,24 +1,19 @@
-import $ivy.`de.tototec::de.tobiasroeser.mill.vcs.version::0.4.1`
-import $ivy.`org.codehaus.plexus:plexus-archiver:4.2.2`
+package millbuild
 
-import de.tobiasroeser.mill.vcs.version.VcsVersion
-import mill._, scalalib._
+import mill.*, scalalib.*
 import mill.scalalib.publish.PublishInfo
+import mill.util.VcsVersion
 import org.codehaus.plexus.archiver.zip.ZipUnArchiver
 
-import scala.concurrent.duration.Duration
-
 trait GenerateHeaders extends JavaModule {
-  def cDirectory = T{
-    millSourcePath / "src" / "main" / "c"
-  }
-  def javacOptions = T{
-    val dest = cDirectory()
+  def cDirectory = Task.Source("src/main/c")
+  def javacOptions = Task{
+    val dest = cDirectory().path
     Seq("-h", dest.toNIO.toAbsolutePath.toString)
   }
-  def compile = T{
+  def compile = Task {
     val res = super.compile()
-    val dir = cDirectory()
+    val dir = cDirectory().path
     val headerFiles = Seq(dir).flatMap { dir =>
       if (os.isDir(dir))
         os.walk(dir)
@@ -109,13 +104,11 @@ trait HasCSources extends JavaModule with PublishModule {
   def windowsJavaHome: T[String]
   def dllName: T[String]
 
-  def linkingLibs = T{ Seq.empty[String] }
+  def linkingLibs = Task(Seq.empty[String])
 
-  def cSources = T.sources {
-    Seq(PathRef(millSourcePath / "src" / "main" / "c"))
-  }
-  def cCompile = T.persistent {
-    val destDir = T.ctx().dest / "obj"
+  def cSources = Task.Sources("src/main/c")
+  def cCompile = Task(persistent = true) {
+    val destDir = Task.dest / "obj"
     val cFiles = cSources().flatMap { dir =>
       if (os.isDir(dir.path))
         os.walk(dir.path)
@@ -136,17 +129,17 @@ trait HasCSources extends JavaModule with PublishModule {
             |if %errorlevel% neq 0 exit /b %errorlevel%
             |cl /I $q${javaHome0 / "include"}$q /I $q${javaHome0 / "include/win32"}$q /utf-8 /c $q$f$q
             |""".stripMargin
-        val scriptPath = T.dest / "run-cl.bat"
+        val scriptPath = Task.dest / "run-cl.bat"
         os.write.over(scriptPath, script.getBytes, createFolders = true)
         os.proc(scriptPath).call(cwd = destDir)
       }
       PathRef(output.resolveFrom(os.pwd))
     }
   }
-  def cLib = T.persistent {
+  def cLib = Task(persistent = true) {
     val allObjFiles = cCompile().map(_.path)
     val fileName = "csjniutils.lib"
-    val output = T.dest / fileName
+    val output = Task.dest / fileName
     val libNeedsUpdate = !os.isFile(output) || allObjFiles.exists(f => os.mtime(output) < os.mtime(f))
     if (libNeedsUpdate) {
       val script =
@@ -154,18 +147,18 @@ trait HasCSources extends JavaModule with PublishModule {
           |if %errorlevel% neq 0 exit /b %errorlevel%
           |lib "/out:$fileName" ${allObjFiles.map(f => "\"" + f.toString + "\"").mkString(" ")}
           |""".stripMargin
-      val scriptPath = T.dest / "run-lib.bat"
+      val scriptPath = Task.dest / "run-lib.bat"
       os.write.over(scriptPath, script.getBytes, createFolders = true)
-      os.proc(scriptPath).call(cwd = T.dest)
+      os.proc(scriptPath).call(cwd = Task.dest)
       if (!os.isFile(output))
         sys.error(s"Error: $output not created")
     }
     PathRef(output)
   }
 
-  def dll = T.persistent {
+  def dll = Task(persistent = true) {
     val dllName0 = dllName()
-    val destDir = T.ctx().dest / "dlls"
+    val destDir = Task.dest / "dlls"
     if (!os.exists(destDir))
       os.makeDir.all(destDir)
     val dest = destDir / s"$dllName0.dll"
@@ -183,16 +176,16 @@ trait HasCSources extends JavaModule with PublishModule {
           |if %errorlevel% neq 0 exit /b %errorlevel%
           |link /DLL "/OUT:$dest" ${libsArgs.mkString(" ")} ${objs.map(f => "\"" + f.path.toString + "\"").mkString(" ")}
           |""".stripMargin
-      val scriptPath = T.dest / "run-cl.bat"
+      val scriptPath = Task.dest / "run-cl.bat"
       os.write.over(scriptPath, script.getBytes, createFolders = true)
-      os.proc(scriptPath).call(cwd = T.dest)
+      os.proc(scriptPath).call(cwd = Task.dest)
     }
     PathRef(dest)
   }
-  def resources = T.sources {
+  def resources = Task {
     val dll0 = dll().path
-    val dir = T.ctx().dest / "dll-resources"
-    val dllDir = dir / "META-INF" / "native" / "windows64"
+    val dir = Task.dest / "dll-resources"
+    val dllDir = dir / "META-INF/native/windows64"
     os.copy(dll0, dllDir / dll0.last, replaceExisting = true, createFolders = true)
     super.resources() ++ Seq(PathRef(dir))
   }
@@ -216,7 +209,7 @@ trait HasCSources extends JavaModule with PublishModule {
 }
 
 trait JniUtilsPublishVersion extends Module {
-  def publishVersion = T{
+  def publishVersion = Task {
     val state = VcsVersion.vcsState()
     if (state.commitsSinceLastTag > 0) {
       val versionOrEmpty = state.lastTag
@@ -252,48 +245,9 @@ trait JniUtilsPublishModule extends PublishModule with JniUtilsPublishVersion {
   )
 }
 
-def publishSonatype(
-  credentials: String,
-  pgpPassword: String,
-  data: Seq[PublishModule.PublishData],
-  timeout: Duration,
-  log: mill.api.Logger,
-  workspace: os.Path,
-  env: Map[String, String]
-): Unit = {
-
-  val artifacts = data.map {
-    case PublishModule.PublishData(a, s) =>
-      (s.map { case (p, f) => (p.path, f) }, a)
-  }
-
-  val isRelease = {
-    val versions = artifacts.map(_._2.version).toSet
-    val set = versions.map(!_.endsWith("-SNAPSHOT"))
-    assert(set.size == 1, s"Found both snapshot and non-snapshot versions: ${versions.toVector.sorted.mkString(", ")}")
-    set.head
-  }
-  val publisher = new publish.SonatypePublisher(
-               uri = "https://oss.sonatype.org/service/local",
-       snapshotUri = "https://oss.sonatype.org/content/repositories/snapshots",
-       credentials = credentials,
-            signed = true,
-           gpgArgs = Seq("--detach-sign", "--batch=true", "--yes", "--pinentry-mode", "loopback", "--passphrase", pgpPassword, "--armor", "--use-agent"),
-       readTimeout = timeout.toMillis.toInt,
-    connectTimeout = timeout.toMillis.toInt,
-               log = log,
-         workspace = workspace,
-               env = env,
-      awaitTimeout = timeout.toMillis.toInt,
-    stagingRelease = isRelease
-  )
-
-  publisher.publishAll(isRelease, artifacts: _*)
-}
-
 trait WithDllNameJava extends JavaModule {
-  def generatedSources = T{
-    val f = T.ctx().dest / "coursier" / "jniutils" / "DllName.java"
+  def generatedSources = Task {
+    val f = Task.dest / "coursier/jniutils/DllName.java"
     val dllName0 = dllName()
     val content =
      s"""package coursier.jniutils;
@@ -307,7 +261,7 @@ trait WithDllNameJava extends JavaModule {
   }
 
   def publishVersion: T[String]
-  def dllName = T{
+  def dllName = Task {
     val ver = publishVersion()
     s"csjniutils-$ver"
   }
