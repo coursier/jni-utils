@@ -75,39 +75,31 @@ def toCrLfOpt(content: Array[Byte]): Option[Array[Byte]] = {
   }
 }
 
-private def vcVersions = Seq("18", "2022", "2019", "2017")
-private def vcEditions = Seq("Enterprise", "Community", "BuildTools")
 private def isArm64: Boolean =
   sys.props.get("os.arch").map(_.toLowerCase(Locale.ROOT)).exists {
     case "aarch64" | "arm64" => true
     case _ => false
   }
-private def windowsNativeResourceDir =
-  if (isArm64) "windows64-arm64" else "windows64"
-private def windowsOtherNativeResourceDir =
-  if (isArm64) "windows64" else "windows64-arm64"
-private def windowsClassifier =
-  if (isArm64) "arm64-pc-win32" else "x86_64-pc-win32"
-private def windowsOtherClassifier =
-  if (isArm64) "x86_64-pc-win32" else "arm64-pc-win32"
-private def windowsArm64Classifier = "arm64-pc-win32"
-private def windowsArm64NativeResourceDir = "windows64-arm64"
+private lazy val (windowsNativeResourceDir, windowsOtherNativeResourceDir) =
+  if (isArm64) ("windows64-arm64", "windows64")
+  else ("windows64", "windows64-arm64")
+private lazy val (windowsClassifier, windowsOtherClassifier) =
+  if (isArm64) ("arm64-pc-win32", "x86_64-pc-win32")
+  else ("x86_64-pc-win32", "arm64-pc-win32")
 
-private def windowsArm64ArtifactsDirOpt: Option[os.Path] =
-  sys.env.get("JNI_UTILS_WINDOWS_ARM64_ARTIFACTS_DIR")
+private lazy val (platformArtifactsDirOpt, otherPlatformArtifactsDirOpt): (Option[os.Path], Option[os.Path]) = {
+  val windowsX86_64ArtifactsDirOpt = Option(System.getenv("JNI_UTILS_WINDOWS_X86_64_ARTIFACTS_DIR"))
     .filter(_.nonEmpty)
     .map(os.Path(_, os.pwd))
-private def windowsX86_64ArtifactsDirOpt: Option[os.Path] =
-  sys.env.get("JNI_UTILS_WINDOWS_X86_64_ARTIFACTS_DIR")
+  val windowsArm64ArtifactsDirOpt = Option(System.getenv("JNI_UTILS_WINDOWS_ARM64_ARTIFACTS_DIR"))
     .filter(_.nonEmpty)
     .map(os.Path(_, os.pwd))
-private def platformArtifactsDirOpt: Option[os.Path] =
-  if (isArm64) windowsArm64ArtifactsDirOpt
-  else windowsX86_64ArtifactsDirOpt
-private def otherPlatformArtifactsDirOpt: Option[os.Path] =
-  if (isArm64) windowsX86_64ArtifactsDirOpt
-  else windowsArm64ArtifactsDirOpt
+  if (isArm64) (windowsArm64ArtifactsDirOpt, windowsX86_64ArtifactsDirOpt)
+  else (windowsX86_64ArtifactsDirOpt, windowsArm64ArtifactsDirOpt)
+}
 
+private def vcVersions = Seq("18", "2022", "2019", "2017")
+private def vcEditions = Seq("Enterprise", "Community", "BuildTools")
 private def vcvarsBat =
   if (isArm64) "vcvarsarm64.bat" else "vcvars64.bat"
 private def progFiles = Seq(

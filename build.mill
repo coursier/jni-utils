@@ -6,16 +6,16 @@ import coursier.core.Repository
 import mill.*, scalalib.*
 import millbuild.*
 
-import java.io.{FileInputStream, FileOutputStream}
+import java.io.FileInputStream
 import java.net.URI
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.Base64
-import java.util.zip.{ZipEntry, ZipInputStream, ZipOutputStream}
 
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
+import scala.util.Using
 
 object `windows-jni-utils` extends MavenModule with JniUtilsPublishVersion with HasCSources with JniUtilsPublishModule with WithDllNameJava {
   def linkingLibs = Seq("ole32", "shell32", "advapi32", "kernel32")
@@ -142,71 +142,16 @@ trait WindowsUtils extends MavenModule with JniUtilsPublishVersion {
 
 object ci extends Module {
 
-  private def ensureCleanDir(dir: os.Path): Unit = {
-    if (os.exists(dir)) os.remove.all(dir)
-    os.makeDir.all(dir)
-  }
-
-  private def zipDir(dir: os.Path, output: os.Path): Unit = {
-    if (os.exists(output)) os.remove(output)
-    os.makeDir.all(output / os.up)
-    val buffer = Array.ofDim[Byte](64 * 1024)
-    val base = dir.toNIO
-    val zos = new ZipOutputStream(new FileOutputStream(output.toIO))
-    try {
-      for (path <- os.walk(dir) if os.isFile(path)) {
-        val name = base.relativize(path.toNIO).iterator().asScala.mkString("/")
-        zos.putNextEntry(new ZipEntry(name))
-        val is = new FileInputStream(path.toIO)
-        try {
-          var read = is.read(buffer)
-          while (read >= 0) {
-            if (read > 0) zos.write(buffer, 0, read)
-            read = is.read(buffer)
-          }
-        } finally is.close()
-        zos.closeEntry()
-      }
-    } finally zos.close()
-  }
-
-  private def unzip(zip: os.Path, dest: os.Path): Unit = {
-    os.makeDir.all(dest)
-    val buffer = Array.ofDim[Byte](64 * 1024)
-    val zis = new ZipInputStream(new FileInputStream(zip.toIO))
-    try {
-      var entry = zis.getNextEntry()
-      while (entry != null) {
-        val outPath = dest / os.SubPath(entry.getName)
-        if (entry.isDirectory) os.makeDir.all(outPath)
-        else {
-          os.makeDir.all(outPath / os.up)
-          val os0 = new FileOutputStream(outPath.toIO)
-          try {
-            var read = zis.read(buffer)
-            while (read >= 0) {
-              if (read > 0) os0.write(buffer, 0, read)
-              read = zis.read(buffer)
-            }
-          } finally os0.close()
-        }
-        zis.closeEntry()
-        entry = zis.getNextEntry()
-      }
-    } finally zis.close()
-  }
-
   private def hexDigest(path: os.Path, algorithm: String): String = {
     val digest = MessageDigest.getInstance(algorithm)
-    val is = new FileInputStream(path.toIO)
     val buffer = Array.ofDim[Byte](64 * 1024)
-    try {
+    Using.resource(os.read.inputStream(path)) { is =>
       var read = is.read(buffer)
       while (read >= 0) {
         if (read > 0) digest.update(buffer, 0, read)
         read = is.read(buffer)
       }
-    } finally is.close()
+    }
     digest.digest().map(b => "%02x".format(b & 0xff)).mkString
   }
 
