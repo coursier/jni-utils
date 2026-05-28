@@ -7,6 +7,8 @@ import mill.*, scalalib.*
 import millbuild.*
 
 import java.io.{FileInputStream, FileOutputStream}
+import java.net.URI
+import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.Base64
@@ -274,11 +276,22 @@ object ci extends Module {
     ).mkString("-")
     val uri =
       s"https://central.sonatype.com/api/v1/publisher/upload?name=$deploymentName&publishingType=AUTOMATIC"
-    os.proc(
-      "curl.exe", "--fail-with-body",
-      "--header", s"Authorization: Bearer $token",
-      "--form", s"bundle=@$bundle;type=application/octet-stream",
-      uri
-    ).call(stdout = os.Inherit, stderr = os.Inherit)
+    val boundary = java.util.UUID.randomUUID().toString.replace("-", "")
+    val fileBytes = os.read.bytes(bundle)
+    val bodyBytes =
+      s"--$boundary\r\nContent-Disposition: form-data; name=\"bundle\"; filename=\"${bundle.last}\"\r\nContent-Type: application/octet-stream\r\n\r\n".getBytes(StandardCharsets.UTF_8) ++
+      fileBytes ++
+      s"\r\n--$boundary--\r\n".getBytes(StandardCharsets.UTF_8)
+    val client = HttpClient.newHttpClient()
+    val request = HttpRequest.newBuilder()
+      .uri(URI.create(uri))
+      .header("Authorization", s"Bearer $token")
+      .header("Content-Type", s"multipart/form-data; boundary=$boundary")
+      .POST(HttpRequest.BodyPublishers.ofByteArray(bodyBytes))
+      .build()
+    val response = client.send(request, HttpResponse.BodyHandlers.ofString())
+    print(response.body())
+    if (response.statusCode() >= 400)
+      sys.error(s"Upload failed with status ${response.statusCode()}")
   }
 }
