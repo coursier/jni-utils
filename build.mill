@@ -210,7 +210,7 @@ object ci extends Module {
 
   def collectNativeArtifacts(outputDir: String) = Task.Command {
     val dir = os.Path(outputDir, os.pwd)
-    os.copy(`windows-jni-utils`.dll().path, dir / "csjniutils.dll", replaceExisting = true)
+    os.copy(`windows-jni-utils`.dll().path, dir / "csjniutils.dll", createFolders = true, replaceExisting = true)
     os.copy(`windows-jni-utils`.cLib().path, dir / "csjniutils.lib", replaceExisting = true)
     PathRef(dir)
   }
@@ -231,12 +231,10 @@ object ci extends Module {
   }
 
   def publishLocalM2Contents(inputZip: String) = Task.Command {
-    val repo = Task.dest / "m2-repository"
+    val repo = os.unzip(os.Path(inputZip, os.pwd), Task.dest / "m2-repository")
+
     val bundleRoot = Task.dest / "central-bundle"
-    val bundle = Task.dest / "central-bundle.zip"
-    unzip(os.Path(inputZip, os.pwd), repo)
-    ensureCleanDir(bundleRoot)
-    os.copy(repo / "io", bundleRoot / "io", mergeFolders = true)
+    os.copy(repo / "io", bundleRoot / "io", createFolders = true, mergeFolders = true)
 
     for {
       path <- os.walk(bundleRoot) if os.isFile(path)
@@ -265,7 +263,7 @@ object ci extends Module {
       os.write.over(file / os.up / s"${file.last}.sha1", hexDigest(file, "SHA-1"))
     }
 
-    os.zip(bundle, Seq(bundleRoot))
+    val bundle = os.zip(Task.dest / "central-bundle.zip", Seq(bundleRoot))
     val token = Base64.getEncoder.encodeToString(
       s"$username:$password".getBytes(StandardCharsets.UTF_8)
     )
