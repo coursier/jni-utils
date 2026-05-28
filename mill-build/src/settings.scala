@@ -5,6 +5,8 @@ import mill.scalalib.publish.PublishInfo
 import mill.util.VcsVersion
 import org.codehaus.plexus.archiver.zip.ZipUnArchiver
 
+import java.util.Locale
+
 trait GenerateHeaders extends JavaModule {
   def cDirectory = Task.Source("src/main/c")
   override def javacOptions = Task{
@@ -76,18 +78,36 @@ def toCrLfOpt(content: Array[Byte]): Option[Array[Byte]] = {
 private def vcVersions = Seq("18", "2022", "2019", "2017")
 private def vcEditions = Seq("Enterprise", "Community", "BuildTools")
 private def isArm64: Boolean =
-  sys.props.get("os.arch").map(_.toLowerCase(java.util.Locale.ROOT)).exists {
+  sys.props.get("os.arch").map(_.toLowerCase(Locale.ROOT)).exists {
     case "aarch64" | "arm64" => true
     case _ => false
   }
 private def windowsNativeResourceDir =
   if (isArm64) "windows64-arm64" else "windows64"
+private def windowsOtherNativeResourceDir =
+  if (isArm64) "windows64" else "windows64-arm64"
 private def windowsClassifier =
   if (isArm64) "arm64-pc-win32" else "x86_64-pc-win32"
+private def windowsOtherClassifier =
+  if (isArm64) "x86_64-pc-win32" else "arm64-pc-win32"
 private def windowsArm64Classifier = "arm64-pc-win32"
 private def windowsArm64NativeResourceDir = "windows64-arm64"
+
 private def windowsArm64ArtifactsDirOpt: Option[os.Path] =
-  sys.env.get("JNI_UTILS_WINDOWS_ARM64_ARTIFACTS_DIR").filter(_.nonEmpty).map(os.Path(_, os.pwd))
+  sys.env.get("JNI_UTILS_WINDOWS_ARM64_ARTIFACTS_DIR")
+    .filter(_.nonEmpty)
+    .map(os.Path(_, os.pwd))
+private def windowsX86_64ArtifactsDirOpt: Option[os.Path] =
+  sys.env.get("JNI_UTILS_WINDOWS_X86_64_ARTIFACTS_DIR")
+    .filter(_.nonEmpty)
+    .map(os.Path(_, os.pwd))
+private def platformArtifactsDirOpt: Option[os.Path] =
+  if (isArm64) windowsArm64ArtifactsDirOpt
+  else windowsX86_64ArtifactsDirOpt
+private def otherPlatformArtifactsDirOpt: Option[os.Path] =
+  if (isArm64) windowsX86_64ArtifactsDirOpt
+  else windowsArm64ArtifactsDirOpt
+
 private def vcvarsBat =
   if (isArm64) "vcvarsarm64.bat" else "vcvars64.bat"
 private def progFiles = Seq(
@@ -117,7 +137,8 @@ private def q = "\""
 trait HasCSources extends JavaModule with PublishModule {
 
   def windowsJavaHome: T[String]
-  def dllName: T[String]
+  def baseDllName: T[String]
+  def dllSuffix: T[String]
 
   def linkingLibs = Task(Seq.empty[String])
 
@@ -151,107 +172,121 @@ trait HasCSources extends JavaModule with PublishModule {
       PathRef(output.resolveFrom(os.pwd))
     }
   }
-  def cLib = Task(persistent = true) {
-    val allObjFiles = cCompile().map(_.path)
-    val fileName = "csjniutils.lib"
-    val output = Task.dest / fileName
-    val libNeedsUpdate = !os.isFile(output) || allObjFiles.exists(f => os.mtime(output) < os.mtime(f))
-    if (libNeedsUpdate) {
-      val script =
-       s"""@call "$vcvars"
-          |if %errorlevel% neq 0 exit /b %errorlevel%
-          |lib "/out:$fileName" ${allObjFiles.map(f => "\"" + f.toString + "\"").mkString(" ")}
-          |""".stripMargin
-      val scriptPath = Task.dest / "run-lib.bat"
-      os.write.over(scriptPath, script.getBytes, createFolders = true)
-      os.proc(scriptPath).call(cwd = Task.dest)
-      if (!os.isFile(output))
-        sys.error(s"Error: $output not created")
-    }
-    PathRef(output)
+  def cLib = platformArtifactsDirOpt match {
+    case Some(platformArtifactsDir) =>
+      Task {
+        val path = platformArtifactsDir / s"${baseDllName()}.lib"
+        if (os.isFile(path))
+          PathRef(path)
+        else
+          Task.fail(s"$path not found")
+      }
+    case None =>
+      Task(persistent = true) {
+        val allObjFiles = cCompile().map(_.path)
+        val fileName = s"${baseDllName()}.lib"
+        val output = Task.dest / fileName
+        val libNeedsUpdate = !os.isFile(output) || allObjFiles.exists(f => os.mtime(output) < os.mtime(f))
+        if (libNeedsUpdate) {
+          val script =
+           s"""@call "$vcvars"
+              |if %errorlevel% neq 0 exit /b %errorlevel%
+              |lib "/out:$fileName" ${allObjFiles.map(f => "\"" + f.toString + "\"").mkString(" ")}
+              |""".stripMargin
+          val scriptPath = Task.dest / "run-lib.bat"
+          os.write.over(scriptPath, script.getBytes, createFolders = true)
+          os.proc(scriptPath).call(cwd = Task.dest)
+          if (!os.isFile(output))
+            sys.error(s"Error: $output not created")
+        }
+        PathRef(output)
+      }
   }
 
-  def dll = Task(persistent = true) {
-    val dllName0 = dllName()
-    val destDir = Task.dest / "dlls"
-    if (!os.exists(destDir))
-      os.makeDir.all(destDir)
-    val dest = destDir / s"$dllName0.dll"
-    val relDest = dest.relativeTo(os.pwd)
-    val objs = cCompile()
-    val objsArgs = objs.map(o => o.path.relativeTo(os.pwd).toString).distinct
-    val libsArgs = linkingLibs().map(l => l + ".lib")
-    val needsUpdate = !os.isFile(dest) || {
-      val destMtime = os.mtime(dest)
-      objs.exists(o => os.mtime(o.path) > destMtime)
-    }
-    if (needsUpdate) {
-      val script =
-       s"""@call "$vcvars"
-          |if %errorlevel% neq 0 exit /b %errorlevel%
-          |link /DLL "/OUT:$dest" ${libsArgs.mkString(" ")} ${objs.map(f => "\"" + f.path.toString + "\"").mkString(" ")}
-          |""".stripMargin
-      val scriptPath = Task.dest / "run-cl.bat"
-      os.write.over(scriptPath, script.getBytes, createFolders = true)
-      os.proc(scriptPath).call(cwd = Task.dest)
-    }
-    PathRef(dest)
+  def dll = platformArtifactsDirOpt match {
+    case Some(platformArtifactsDir) =>
+      Task {
+        val path = platformArtifactsDir / s"${baseDllName()}.dll"
+        if (os.isFile(path))
+          PathRef(path)
+        else
+          Task.fail(s"$path not found")
+      }
+    case None =>
+      Task(persistent = true) {
+        val destDir = Task.dest / "dlls"
+        if (!os.exists(destDir))
+          os.makeDir.all(destDir)
+        val dest = destDir / s"${baseDllName()}.dll"
+        val relDest = dest.relativeTo(os.pwd)
+        val objs = cCompile()
+        val objsArgs = objs.map(o => o.path.relativeTo(os.pwd).toString).distinct
+        val libsArgs = linkingLibs().map(l => l + ".lib")
+        val needsUpdate = !os.isFile(dest) || {
+          val destMtime = os.mtime(dest)
+          objs.exists(o => os.mtime(o.path) > destMtime)
+        }
+        if (needsUpdate) {
+          val script =
+           s"""@call "$vcvars"
+              |if %errorlevel% neq 0 exit /b %errorlevel%
+              |link /DLL "/OUT:$dest" ${libsArgs.mkString(" ")} ${objs.map(f => "\"" + f.path.toString + "\"").mkString(" ")}
+              |""".stripMargin
+          val scriptPath = Task.dest / "run-cl.bat"
+          os.write.over(scriptPath, script.getBytes, createFolders = true)
+          os.proc(scriptPath).call(cwd = Task.dest)
+        }
+        PathRef(dest)
+      }
   }
-  def windowsArm64DllArtifact = Task {
-    windowsArm64ArtifactsDirOpt
-      .map(_ / s"${dllName()}.dll")
-      .filter(os.isFile)
-      .map(PathRef(_))
-  }
-  def windowsArm64CLibArtifact = Task {
-    windowsArm64ArtifactsDirOpt
-      .map(_ / "csjniutils.lib")
-      .filter(os.isFile)
-      .map(PathRef(_))
-  }
-  override def resources = Task {
+  def resources = Task {
     val dll0 = dll().path
-    val dir = Task.dest / "dll-resources"
-    val dllDir = dir / "META-INF/native" / windowsNativeResourceDir
-    os.copy(dll0, dllDir / dll0.last, replaceExisting = true, createFolders = true)
-    for (arm64Dll <- windowsArm64DllArtifact()) {
-      val arm64DllDir = dir / "META-INF/native" / windowsArm64NativeResourceDir
-      os.copy(arm64Dll.path, arm64DllDir / arm64Dll.path.last, replaceExisting = true, createFolders = true)
+    val dllDir = Task.dest / "META-INF/native" / windowsNativeResourceDir
+    val finalDllName = s"${baseDllName()}${dllSuffix()}.dll"
+    os.copy(dll0, dllDir / finalDllName, replaceExisting = true, createFolders = true)
+    for (otherDll <- otherPlatformArtifactsDirOpt.map(_ / s"${baseDllName()}.dll")) {
+      val otherDir = Task.dest / "META-INF/native" / windowsOtherNativeResourceDir
+      os.copy(otherDll, otherDir / finalDllName, replaceExisting = true, createFolders = true)
     }
-    super.resources() ++ Seq(PathRef(dir))
+    super.resources() ++ Seq(PathRef(Task.dest))
   }
 
-  def extraPublish = super.extraPublish() ++ Seq(
-    PublishInfo(
-      file = dll(),
-      ivyConfig = "compile",
-      classifier = Some(windowsClassifier),
-      ext = "dll",
-      ivyType = "dll"
-    ),
-    PublishInfo(
-      file = cLib(),
-      ivyConfig = "compile",
-      classifier = Some(windowsClassifier),
-      ext = "lib",
-      ivyType = "lib"
-    )
-  ) ++ windowsArm64DllArtifact().map { f =>
-    PublishInfo(
-      file = f,
-      ivyConfig = "compile",
-      classifier = Some(windowsArm64Classifier),
-      ext = "dll",
-      ivyType = "dll"
-    )
-  } ++ windowsArm64CLibArtifact().map { f =>
-    PublishInfo(
-      file = f,
-      ivyConfig = "compile",
-      classifier = Some(windowsArm64Classifier),
-      ext = "lib",
-      ivyType = "lib"
-    )
+  def extraPublish = Task {
+    super.extraPublish() ++
+    Seq(
+      PublishInfo(
+        file = dll(),
+        ivyConfig = "compile",
+        classifier = Some(windowsClassifier),
+        ext = "dll",
+        ivyType = "dll"
+      ),
+      PublishInfo(
+        file = cLib(),
+        ivyConfig = "compile",
+        classifier = Some(windowsClassifier),
+        ext = "lib",
+        ivyType = "lib"
+      )
+    ) ++
+    otherPlatformArtifactsDirOpt.map { dir =>
+      PublishInfo(
+        file = PathRef(dir / s"${baseDllName()}.dll"),
+        ivyConfig = "compile",
+        classifier = Some(windowsOtherClassifier),
+        ext = "dll",
+        ivyType = "dll"
+      )
+    } ++
+    otherPlatformArtifactsDirOpt.map { dir =>
+      PublishInfo(
+        file = PathRef(dir / s"${baseDllName()}.lib"),
+        ivyConfig = "compile",
+        classifier = Some(windowsOtherClassifier),
+        ext = "lib",
+        ivyType = "lib"
+      )
+    }
   }
 }
 
@@ -295,7 +330,7 @@ trait JniUtilsPublishModule extends PublishModule with JniUtilsPublishVersion {
 trait WithDllNameJava extends JavaModule {
   def generatedSources = Task {
     val f = Task.dest / "coursier/jniutils/DllName.java"
-    val dllName0 = dllName()
+    val dllName0 = baseDllName() + dllSuffix()
     val content =
      s"""package coursier.jniutils;
         |
@@ -308,8 +343,6 @@ trait WithDllNameJava extends JavaModule {
   }
 
   def publishVersion: T[String]
-  def dllName = Task {
-    val ver = publishVersion()
-    s"csjniutils-$ver"
-  }
+  def baseDllName = Task("csjniutils")
+  def dllSuffix = Task("-" + publishVersion())
 }

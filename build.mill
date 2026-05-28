@@ -2,13 +2,17 @@
 
 package build
 
+import coursier.core.Repository
 import mill.*, scalalib.*
 import millbuild.*
 
-import scala.concurrent.duration.*
 import java.io.{FileInputStream, FileOutputStream}
+import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.util.Base64
 import java.util.zip.{ZipEntry, ZipInputStream, ZipOutputStream}
+
+import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 
 object `windows-jni-utils` extends MavenModule with JniUtilsPublishVersion with HasCSources with JniUtilsPublishModule with WithDllNameJava {
@@ -54,36 +58,56 @@ object `windows-jni-utils-coursierapi` extends WindowsUtils with JniUtilsPublish
 
 object `windows-jni-utils-tests` extends ScalaModule with JniUtilsPublishModule {
   def scalaVersion = Scala.scala213
-  def moduleDeps = Seq(`windows-jni-utils`)
-  object test extends ScalaTests {
-    def moduleDeps = super.moduleDeps ++ Seq(
-      `windows-jni-utils-bootstrap`,
-      `windows-jni-utils-lmcoursier`,
-      `windows-jni-utils-coursierapi`
-    )
-    def mvnDeps = Seq(Deps.utest)
-    def testFramework = "utest.runner.Framework"
-  }
-}
 
-object `windows-jni-utils-published-tests` extends ScalaModule with JniUtilsPublishVersion {
-  def moduleDir = super.moduleDir / os.up / "windows-jni-utils-tests"
-  def scalaVersion = Scala.scala213
-  def publishedDep(artifactId: String, version: String) =
-    mvn"io.get-coursier.jniutils:$artifactId:$version"
-  def mvnDeps = Task {
-    Seq(publishedDep("windows-jni-utils", publishVersion()))
-  }
-  object test extends ScalaTests {
-    def mvnDeps = Task {
-      val version = publishVersion()
-      super.mvnDeps() ++ Seq(
-        Deps.utest,
-        publishedDep("windows-jni-utils-bootstrap", version),
-        publishedDep("windows-jni-utils-lmcoursier", version),
-        publishedDep("windows-jni-utils-coursierapi", version)
-      )
+  private lazy val repoArchive = Option(System.getenv("REPO_ARCHIVE"))
+    .filter(_.nonEmpty)
+    .map(os.Path(_, os.pwd))
+
+  def moduleDeps =
+    if (repoArchive.isEmpty) Seq(`windows-jni-utils`)
+    else Nil
+
+  def repositories: T[Seq[String]] =
+    repoArchive match {
+      case None => super.repositories
+      case Some(arc) =>
+        Task {
+          val dir = Task.dest / "repo"
+          os.unzip(arc, dir)
+          Seq(dir.toNIO.toUri.toASCIIString) ++ super.repositories()
+        }
     }
+
+  def mvnDeps =
+    if (repoArchive.isEmpty) super.mvnDeps
+    else
+      Task {
+        super.mvnDeps() ++ Seq(
+          mvn"${`windows-jni-utils`.pomSettings().organization}:${`windows-jni-utils`.artifactId()}:${`windows-jni-utils`.publishVersion()}"
+        )
+      }
+
+  object test extends ScalaTests {
+    def moduleDeps =
+      if (repoArchive.isEmpty)
+        super.moduleDeps ++ Seq(
+          `windows-jni-utils-bootstrap`,
+          `windows-jni-utils-lmcoursier`,
+          `windows-jni-utils-coursierapi`
+        )
+      else
+        Nil
+    def mvnDeps =
+      if (repoArchive.isEmpty)
+        Task(Seq(Deps.utest))
+      else
+        Task {
+          Seq(Deps.utest) ++ Seq(
+            mvn"${`windows-jni-utils-bootstrap`.pomSettings().organization}:${`windows-jni-utils-bootstrap`.artifactId()}:${`windows-jni-utils-bootstrap`.publishVersion()}",
+            mvn"${`windows-jni-utils-lmcoursier`.pomSettings().organization}:${`windows-jni-utils-lmcoursier`.artifactId()}:${`windows-jni-utils-lmcoursier`.publishVersion()}",
+            mvn"${`windows-jni-utils-coursierapi`.pomSettings().organization}:${`windows-jni-utils-coursierapi`.artifactId()}:${`windows-jni-utils-coursierapi`.publishVersion()}"
+          )
+        }
     def testFramework = "utest.runner.Framework"
   }
 }
@@ -184,33 +208,26 @@ object ci extends Module {
     digest.digest().map(b => "%02x".format(b & 0xff)).mkString
   }
 
-  def collectWindowsArm64NativeArtifacts(outputDir: String) = Task.Command {
+  def collectNativeArtifacts(outputDir: String) = Task.Command {
     val dir = os.Path(outputDir, os.pwd)
-    ensureCleanDir(dir)
     os.copy(`windows-jni-utils`.dll().path, dir / "csjniutils.dll", replaceExisting = true)
     os.copy(`windows-jni-utils`.cLib().path, dir / "csjniutils.lib", replaceExisting = true)
     PathRef(dir)
   }
 
-  def packageLocalM2(m2RepoPath: String, outputZip: String) = Task.Command {
-    val repo = os.Path(m2RepoPath, os.pwd)
-    val zip = os.Path(outputZip, os.pwd)
-    ensureCleanDir(repo)
-    `windows-jni-utils`.publishM2Local(m2RepoPath = m2RepoPath)()
-    `windows-jni-utils-graalvm`.publishM2Local(m2RepoPath = m2RepoPath)()
-    `windows-jni-utils-bootstrap`.publishM2Local(m2RepoPath = m2RepoPath)()
-    `windows-jni-utils-lmcoursier`.publishM2Local(m2RepoPath = m2RepoPath)()
-    `windows-jni-utils-coursierapi`.publishM2Local(m2RepoPath = m2RepoPath)()
-    `windows-jni-utils-tests`.publishM2Local(m2RepoPath = m2RepoPath)()
-    zipDir(repo, zip)
-    PathRef(zip)
-  }
-
-  def installLocalM2(inputZip: String, m2RepoPath: String) = Task.Command {
-    val zip = os.Path(inputZip, os.pwd)
-    val repo = os.Path(m2RepoPath, os.pwd)
-    unzip(zip, repo)
-    PathRef(repo)
+  def packageLocalM2(output: String) = {
+    val repo = os.temp.dir()
+    Task.Command {
+      os.list(repo).foreach(os.remove.all)
+      `windows-jni-utils`.publishM2Local(m2RepoPath = repo.toString)()
+      `windows-jni-utils-graalvm`.publishM2Local(m2RepoPath = repo.toString)()
+      `windows-jni-utils-bootstrap`.publishM2Local(m2RepoPath = repo.toString)()
+      `windows-jni-utils-lmcoursier`.publishM2Local(m2RepoPath = repo.toString)()
+      `windows-jni-utils-coursierapi`.publishM2Local(m2RepoPath = repo.toString)()
+      `windows-jni-utils-tests`.publishM2Local(m2RepoPath = repo.toString)()
+      val zip = os.Path(output, os.pwd)
+      PathRef(os.zip(zip, Seq(repo)))
+    }
   }
 
   def publishLocalM2Contents(inputZip: String) = Task.Command {
@@ -236,7 +253,7 @@ object ci extends Module {
     val password = sys.env.getOrElse("MILL_SONATYPE_PASSWORD", sys.error("MILL_SONATYPE_PASSWORD not set"))
 
     val keyPath = Task.dest / "publish-key.asc"
-    os.write.over(keyPath, java.util.Base64.getDecoder.decode(secretBase64))
+    os.write.over(keyPath, Base64.getDecoder.decode(secretBase64))
     os.proc("gpg", "--batch", "--import", keyPath).call(stdout = os.Inherit, stderr = os.Inherit)
 
     for (file <- os.walk(bundleRoot) if os.isFile(file) && !Set("asc", "md5", "sha1")(file.ext)) {
@@ -248,9 +265,9 @@ object ci extends Module {
       os.write.over(file / os.up / s"${file.last}.sha1", hexDigest(file, "SHA-1"))
     }
 
-    zipDir(bundleRoot, bundle)
-    val token = java.util.Base64.getEncoder.encodeToString(
-      s"$username:$password".getBytes(java.nio.charset.StandardCharsets.UTF_8)
+    os.zip(bundle, Seq(bundleRoot))
+    val token = Base64.getEncoder.encodeToString(
+      s"$username:$password".getBytes(StandardCharsets.UTF_8)
     )
     val deploymentName = Seq(
       "jni-utils",

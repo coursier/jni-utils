@@ -14,7 +14,6 @@ jobs:
     - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-        submodules: true
     - uses: coursier/cache-action@v8
     - name: Empty sources, orphan sources, missing test classes checks
       run: ./mill -i --import io.github.alexarchambault.mill::mill-checks:0.1.2 io.github.alexarchambault.millchecks.MillChecks/allChecks
@@ -22,51 +21,63 @@ jobs:
         MILL_CHECKS_ORPHAN_SOURCES_IGNORE: >-
           mill-build
 
-  windows-arm64-native:
-    name: Build Windows ARM64 native artifacts
-    runs-on: windows-11-arm
+  test:
+    name: Test ${{ matrix.id }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ["windows-latest"]
+        id: ["windows-x86-64"]
+        include:
+          - runner: windows-11-arm
+            id: "windows-arm64"
+    runs-on: ${{ matrix.runner }}
     steps:
     - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-        submodules: true
     - uses: coursier/cache-action@v8
+    - name: Compile
+      run: ./mill -i __.test.compile
+    - name: Test
+      run: ./mill -i __.test
     - name: Collect native artifacts
-      run: ./mill -i ci.collectWindowsArm64NativeArtifacts --output-dir "${{ runner.temp }}/windows-arm64-native"
+      run: ./mill -i ci.collectNativeArtifacts --output-dir "${{ runner.temp }}/${{ matrix.id }}-native"
     - uses: actions/upload-artifact@v4
       with:
-        name: windows-arm64-native
-        path: ${{ runner.temp }}/windows-arm64-native
+        name: ${{ matrix.id }}-native
+        path: ${{ runner.temp }}/${{ matrix.id }}-native
 
-  package-local-m2:
+  build-repo:
     name: Package local Maven repo
-    needs: windows-arm64-native
+    needs: test
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-        submodules: true
     - uses: coursier/cache-action@v8
     - uses: actions/download-artifact@v4
       with:
         name: windows-arm64-native
         path: ${{ runner.temp }}/windows-arm64-native
+    - uses: actions/download-artifact@v4
+      with:
+        name: windows-x86-64-native
+        path: ${{ runner.temp }}/windows-x86-64-native
     - name: Publish to temporary Maven repo
       env:
         JNI_UTILS_WINDOWS_ARM64_ARTIFACTS_DIR: ${{ runner.temp }}/windows-arm64-native
-      run: >-
-        ./mill -i ci.packageLocalM2
-        --m-2-repo-path "${{ runner.temp }}/m2-repository"
-        --output-zip "${{ runner.temp }}/jni-utils-m2-repository.zip"
+        JNI_UTILS_WINDOWS_X86_64_ARTIFACTS_DIR: ${{ runner.temp }}/windows-x86-64-native
+      run: ./mill -i ci.packageLocalM2 --output "${{ runner.temp }}/m2-repo.zip"
     - uses: actions/upload-artifact@v4
       with:
-        name: jni-utils-m2-repository
-        path: ${{ runner.temp }}/jni-utils-m2-repository.zip
+        name: m2-repo
+        path: ${{ runner.temp }}/m2-repo.zip
 
-  test-published:
+  test-repo:
     name: Test published JAR (${{ matrix.runner }})
-    needs: package-local-m2
+    needs: build-repo
     strategy:
       fail-fast: false
       matrix:
@@ -78,33 +89,28 @@ jobs:
     - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-        submodules: true
     - uses: coursier/cache-action@v8
     - uses: actions/download-artifact@v4
       with:
-        name: jni-utils-m2-repository
+        name: m2-repo
         path: ${{ runner.temp }}
-    - name: Install local Maven repo
-      run: >-
-        ./mill -i ci.installLocalM2
-        --input-zip "${{ runner.temp }}/jni-utils-m2-repository.zip"
-        --m-2-repo-path "$HOME/.m2/repository"
     - name: Test published JAR
       run: ./mill -i windows-jni-utils-published-tests.test
+      env:
+        REPO_ARCHIVE: "${{ runner.temp }}/m2-repo.zip"
 
   publish:
     if: github.event_name == 'push'
-    needs: test-published
+    needs: test-repo
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-        submodules: true
     - uses: coursier/cache-action@v8
     - uses: actions/download-artifact@v4
       with:
-        name: jni-utils-m2-repository
+        name: m2-repo
         path: ${{ runner.temp }}
     - name: Publish local Maven repo contents
       env:
@@ -112,4 +118,4 @@ jobs:
         MILL_PGP_PASSPHRASE: ${{ secrets.PUBLISH_SECRET_KEY_PASSWORD }}
         MILL_SONATYPE_USERNAME: ${{ secrets.PUBLISH_USER }}
         MILL_SONATYPE_PASSWORD: ${{ secrets.PUBLISH_PASSWORD }}
-      run: ./mill -i ci.publishLocalM2Contents --input-zip "${{ runner.temp }}/jni-utils-m2-repository.zip"
+      run: ./mill -i ci.publishLocalM2Contents --input-zip "${{ runner.temp }}/m2-repo.zip"
