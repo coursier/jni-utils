@@ -95,7 +95,7 @@ jobs:
         name: m2-repo
         path: ${{ runner.temp }}
     - name: Test published JAR
-      run: ./mill -i windows-jni-utils-published-tests.test
+      run: ./mill -i __.test
       env:
         REPO_ARCHIVE: "${{ runner.temp }}/m2-repo.zip"
 
