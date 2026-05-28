@@ -66,10 +66,13 @@ jobs:
         name: windows-x86-64-native
         path: ${{ runner.temp }}/windows-x86-64-native
     - name: Publish to temporary Maven repo
+      run: |
+        ./mill -i show __.dll
+        ./mill -i show __.cLib
+        ./mill -i ci.packageLocalM2 --output "${{ runner.temp }}/m2-repo.zip"
       env:
         JNI_UTILS_WINDOWS_ARM64_ARTIFACTS_DIR: ${{ runner.temp }}/windows-arm64-native
         JNI_UTILS_WINDOWS_X86_64_ARTIFACTS_DIR: ${{ runner.temp }}/windows-x86-64-native
-      run: ./mill -i ci.packageLocalM2 --output "${{ runner.temp }}/m2-repo.zip"
     - uses: actions/upload-artifact@v4
       with:
         name: m2-repo
@@ -96,8 +99,7 @@ jobs:
         path: ${{ runner.temp }}
     - name: Test published JAR
       run: |
-        ./mill -i show __.dll
-        ./mill -i show __.cLib
+        ./mill -i show windows-jni-utils-tests.test.runClasspath
         ./mill -i __.test
       env:
         REPO_ARCHIVE: "${{ runner.temp }}/m2-repo.zip"
