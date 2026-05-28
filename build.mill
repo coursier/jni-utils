@@ -2,10 +2,22 @@
 
 package build
 
-import mill.*, scalalib.*
+import coursier.core.Repository
+import mill.*
+import mill.api.BuildCtx
+import mill.scalalib.*
 import millbuild.*
 
+import java.io.FileInputStream
+import java.net.URI
+import java.net.http.{HttpClient, HttpRequest, HttpResponse}
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.util.Base64
+
 import scala.concurrent.duration.*
+import scala.jdk.CollectionConverters.*
+import scala.util.Using
 
 object `windows-jni-utils` extends MavenModule with JniUtilsPublishVersion with HasCSources with JniUtilsPublishModule with WithDllNameJava {
   def linkingLibs = Seq("ole32", "shell32", "advapi32", "kernel32")
@@ -48,16 +60,58 @@ object `windows-jni-utils-coursierapi` extends WindowsUtils with JniUtilsPublish
   def moduleDeps = Seq(`windows-jni-utils`)
 }
 
-object `windows-jni-utils-tests` extends ScalaModule with JniUtilsPublishModule {
+object `windows-jni-utils-tests` extends ScalaModule {
   def scalaVersion = Scala.scala213
-  def moduleDeps = Seq(`windows-jni-utils`)
+
+  private lazy val repoArchive = Option(System.getenv("REPO_ARCHIVE"))
+    .filter(_.nonEmpty)
+    .map(os.Path(_, os.pwd))
+
+  def moduleDeps =
+    if (repoArchive.isEmpty) Seq(`windows-jni-utils`)
+    else Nil
+
+  def repositories: T[Seq[String]] =
+    repoArchive match {
+      case None => super.repositories
+      case Some(arc) =>
+        Task {
+          val dir = Task.dest / "repo"
+          os.unzip(arc, dir)
+          Seq(dir.toNIO.toUri.toASCIIString) ++ super.repositories()
+        }
+    }
+
+  def mvnDeps =
+    if (repoArchive.isEmpty) super.mvnDeps
+    else
+      Task {
+        super.mvnDeps() ++ Seq(
+          mvn"${`windows-jni-utils`.pomSettings().organization}:${`windows-jni-utils`.artifactId()}:${`windows-jni-utils`.publishVersion()}"
+        )
+      }
+
   object test extends ScalaTests {
-    def moduleDeps = super.moduleDeps ++ Seq(
-      `windows-jni-utils-bootstrap`,
-      `windows-jni-utils-lmcoursier`,
-      `windows-jni-utils-coursierapi`
-    )
-    def mvnDeps = Seq(Deps.utest)
+    def moduleDeps =
+      if (repoArchive.isEmpty)
+        super.moduleDeps ++ Seq(
+          `windows-jni-utils-bootstrap`,
+          `windows-jni-utils-lmcoursier`,
+          `windows-jni-utils-coursierapi`
+        )
+      else
+        Nil
+    def mvnDeps =
+      if (repoArchive.isEmpty)
+        Task(Seq(Deps.utest))
+      else
+        Task {
+          Seq(Deps.utest) ++ Seq(
+            mvn"${`windows-jni-utils-bootstrap`.pomSettings().organization}:${`windows-jni-utils-bootstrap`.artifactId()}:${`windows-jni-utils-bootstrap`.publishVersion()}",
+            mvn"${`windows-jni-utils-lmcoursier`.pomSettings().organization}:${`windows-jni-utils-lmcoursier`.artifactId()}:${`windows-jni-utils-lmcoursier`.publishVersion()}",
+            mvn"${`windows-jni-utils-coursierapi`.pomSettings().organization}:${`windows-jni-utils-coursierapi`.artifactId()}:${`windows-jni-utils-coursierapi`.publishVersion()}"
+          )
+        }
     def testFramework = "utest.runner.Framework"
   }
 }
@@ -86,4 +140,106 @@ trait WindowsUtils extends MavenModule with JniUtilsPublishVersion {
   def javacOptions = super.javacOptions() ++ Seq(
     "--release", "8"
   )
+}
+
+object ci extends Module {
+
+  private def hexDigest(path: os.Path, algorithm: String): String = {
+    val digest = MessageDigest.getInstance(algorithm)
+    val buffer = Array.ofDim[Byte](64 * 1024)
+    Using.resource(os.read.inputStream(path)) { is =>
+      var read = is.read(buffer)
+      while (read >= 0) {
+        if (read > 0) digest.update(buffer, 0, read)
+        read = is.read(buffer)
+      }
+    }
+    digest.digest().map(b => "%02x".format(b & 0xff)).mkString
+  }
+
+  def collectNativeArtifacts(outputDir: String) = Task.Command {
+    val dir = os.Path(outputDir, os.pwd)
+    os.copy(`windows-jni-utils`.dll().path, dir / "csjniutils.dll", createFolders = true, replaceExisting = true)
+    os.copy(`windows-jni-utils`.cLib().path, dir / "csjniutils.lib", replaceExisting = true)
+    PathRef(dir)
+  }
+
+  def packageLocalM2(output: String, workingDir: String = null) = {
+    val repo = Option(workingDir)
+      .filter(_.nonEmpty)
+      .map(os.Path(_, BuildCtx.workspaceRoot))
+      .getOrElse(BuildCtx.workspaceRoot / "working-dir")
+    Task.Command {
+      `windows-jni-utils`.publishM2Local(m2RepoPath = repo.toString)()
+      `windows-jni-utils-graalvm`.publishM2Local(m2RepoPath = repo.toString)()
+      `windows-jni-utils-bootstrap`.publishM2Local(m2RepoPath = repo.toString)()
+      `windows-jni-utils-lmcoursier`.publishM2Local(m2RepoPath = repo.toString)()
+      `windows-jni-utils-coursierapi`.publishM2Local(m2RepoPath = repo.toString)()
+      val zip = os.Path(output, BuildCtx.workspaceRoot)
+      PathRef(os.zip(zip, Seq(repo)))
+    }
+  }
+
+  def publishLocalM2Contents(inputZip: String) = Task.Command {
+    val repo = os.unzip(os.Path(inputZip, os.pwd), Task.dest / "m2-repository")
+
+    val bundleRoot = Task.dest / "central-bundle"
+    os.copy(repo / "io", bundleRoot / "io", createFolders = true, mergeFolders = true)
+
+    for {
+      path <- os.walk(bundleRoot) if os.isFile(path)
+      name = path.last
+      if name == "maven-metadata-local.xml" ||
+        name == "_remote.repositories" ||
+        name == "resolver-status.properties" ||
+        name.endsWith(".lastUpdated")
+    } os.remove(path)
+
+    val secretBase64 = sys.env.getOrElse("MILL_PGP_SECRET_BASE64", sys.error("MILL_PGP_SECRET_BASE64 not set"))
+    val passphrase = sys.env.getOrElse("MILL_PGP_PASSPHRASE", sys.error("MILL_PGP_PASSPHRASE not set"))
+    val username = sys.env.getOrElse("MILL_SONATYPE_USERNAME", sys.error("MILL_SONATYPE_USERNAME not set"))
+    val password = sys.env.getOrElse("MILL_SONATYPE_PASSWORD", sys.error("MILL_SONATYPE_PASSWORD not set"))
+
+    val keyPath = Task.dest / "publish-key.asc"
+    os.write.over(keyPath, Base64.getDecoder.decode(secretBase64))
+    os.proc("gpg", "--batch", "--import", keyPath).call(stdout = os.Inherit, stderr = os.Inherit)
+
+    for (file <- os.walk(bundleRoot) if os.isFile(file) && !Set("asc", "md5", "sha1")(file.ext)) {
+      os.proc(
+        "gpg", "--batch", "--yes", "--pinentry-mode", "loopback", "--passphrase", passphrase,
+        "--armor", "--detach-sign", file
+      ).call(stdout = os.Inherit, stderr = os.Inherit)
+      os.write.over(file / os.up / s"${file.last}.md5", hexDigest(file, "MD5"))
+      os.write.over(file / os.up / s"${file.last}.sha1", hexDigest(file, "SHA-1"))
+    }
+
+    val bundle = os.zip(Task.dest / "central-bundle.zip", Seq(bundleRoot))
+    val token = Base64.getEncoder.encodeToString(
+      s"$username:$password".getBytes(StandardCharsets.UTF_8)
+    )
+    val deploymentName = Seq(
+      "jni-utils",
+      sys.env.getOrElse("GITHUB_REF_NAME", "local"),
+      sys.env.getOrElse("GITHUB_SHA", "unknown")
+    ).mkString("-")
+    val uri =
+      s"https://central.sonatype.com/api/v1/publisher/upload?name=$deploymentName&publishingType=AUTOMATIC"
+    val boundary = java.util.UUID.randomUUID().toString.replace("-", "")
+    val fileBytes = os.read.bytes(bundle)
+    val bodyBytes =
+      s"--$boundary\r\nContent-Disposition: form-data; name=\"bundle\"; filename=\"${bundle.last}\"\r\nContent-Type: application/octet-stream\r\n\r\n".getBytes(StandardCharsets.UTF_8) ++
+      fileBytes ++
+      s"\r\n--$boundary--\r\n".getBytes(StandardCharsets.UTF_8)
+    val client = HttpClient.newHttpClient()
+    val request = HttpRequest.newBuilder()
+      .uri(URI.create(uri))
+      .header("Authorization", s"Bearer $token")
+      .header("Content-Type", s"multipart/form-data; boundary=$boundary")
+      .POST(HttpRequest.BodyPublishers.ofByteArray(bodyBytes))
+      .build()
+    val response = client.send(request, HttpResponse.BodyHandlers.ofString())
+    print(response.body())
+    if (response.statusCode() >= 400)
+      sys.error(s"Upload failed with status ${response.statusCode()}")
+  }
 }

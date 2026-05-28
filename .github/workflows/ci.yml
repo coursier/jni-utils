@@ -14,7 +14,6 @@ jobs:
     - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-        submodules: true
     - uses: coursier/cache-action@v8
     - name: Empty sources, orphan sources, missing test classes checks
       run: ./mill -i --import io.github.alexarchambault.mill::mill-checks:0.1.2 io.github.alexarchambault.millchecks.MillChecks/allChecks
@@ -27,6 +26,64 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        runner: ["windows-latest"]
+        id: ["windows-x86-64"]
+        include:
+          - runner: windows-11-arm
+            id: "windows-arm64"
+    runs-on: ${{ matrix.runner }}
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - uses: coursier/cache-action@v8
+    - name: Compile
+      run: ./mill -i __.test.compile
+    - name: Test
+      run: ./mill -i __.test
+    - name: Collect native artifacts
+      run: ./mill -i ci.collectNativeArtifacts --output-dir "${{ runner.temp }}/${{ matrix.id }}-native"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.id }}-native
+        path: ${{ runner.temp }}/${{ matrix.id }}-native
+
+  build-repo:
+    name: Package local Maven repo
+    needs: test
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - uses: coursier/cache-action@v8
+    - uses: actions/download-artifact@v4
+      with:
+        name: windows-arm64-native
+        path: ${{ runner.temp }}/windows-arm64-native
+    - uses: actions/download-artifact@v4
+      with:
+        name: windows-x86-64-native
+        path: ${{ runner.temp }}/windows-x86-64-native
+    - name: Publish to temporary Maven repo
+      run: |
+        ./mill -i show __.dll
+        ./mill -i show __.cLib
+        ./mill -i ci.packageLocalM2 --output "${{ runner.temp }}/m2-repo.zip"
+      env:
+        JNI_UTILS_WINDOWS_ARM64_ARTIFACTS_DIR: ${{ runner.temp }}/windows-arm64-native
+        JNI_UTILS_WINDOWS_X86_64_ARTIFACTS_DIR: ${{ runner.temp }}/windows-x86-64-native
+    - uses: actions/upload-artifact@v4
+      with:
+        name: m2-repo
+        path: ${{ runner.temp }}/m2-repo.zip
+
+  test-repo:
+    name: Test published JAR (${{ matrix.runner }})
+    needs: build-repo
+    strategy:
+      fail-fast: false
+      matrix:
         runner:
         - windows-latest
         - windows-11-arm
@@ -35,31 +92,35 @@ jobs:
     - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-        submodules: true
     - uses: coursier/cache-action@v8
-    - name: Compile
-      run: ./mill -i __.test.compile
-    - name: Test
-      run: ./mill -i __.test
-    - name: Publish local
-      run: ./mill -i __.publishLocal
+    - uses: actions/download-artifact@v4
+      with:
+        name: m2-repo
+        path: ${{ runner.temp }}
+    - name: Test published JAR
+      run: |
+        ./mill -i show windows-jni-utils-tests.test.runClasspath
+        ./mill -i __.test
+      env:
+        REPO_ARCHIVE: "${{ runner.temp }}/m2-repo.zip"
 
   publish:
     if: github.event_name == 'push'
+    needs: test-repo
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-        submodules: true
     - uses: coursier/cache-action@v8
-    - uses: coursier/setup-action@v3
+    - uses: actions/download-artifact@v4
       with:
-        jvm: "zulu:21"
-    - name: Release
-      run: ./mill -i mill.scalalib.SonatypeCentralPublishModule/
+        name: m2-repo
+        path: ${{ runner.temp }}
+    - name: Publish local Maven repo contents
       env:
         MILL_PGP_SECRET_BASE64: ${{ secrets.PUBLISH_SECRET_KEY }}
         MILL_PGP_PASSPHRASE: ${{ secrets.PUBLISH_SECRET_KEY_PASSWORD }}
         MILL_SONATYPE_USERNAME: ${{ secrets.PUBLISH_USER }}
         MILL_SONATYPE_PASSWORD: ${{ secrets.PUBLISH_PASSWORD }}
+      run: ./mill -i ci.publishLocalM2Contents --input-zip "${{ runner.temp }}/m2-repo.zip"
