@@ -3,7 +3,9 @@
 package build
 
 import coursier.core.Repository
-import mill.*, scalalib.*
+import mill.*
+import mill.api.BuildCtx
+import mill.scalalib.*
 import millbuild.*
 
 import java.io.FileInputStream
@@ -58,7 +60,7 @@ object `windows-jni-utils-coursierapi` extends WindowsUtils with JniUtilsPublish
   def moduleDeps = Seq(`windows-jni-utils`)
 }
 
-object `windows-jni-utils-tests` extends ScalaModule with JniUtilsPublishModule {
+object `windows-jni-utils-tests` extends ScalaModule {
   def scalaVersion = Scala.scala213
 
   private lazy val repoArchive = Option(System.getenv("REPO_ARCHIVE"))
@@ -162,17 +164,18 @@ object ci extends Module {
     PathRef(dir)
   }
 
-  def packageLocalM2(output: String) = {
-    val repo = os.temp.dir()
+  def packageLocalM2(output: String, workingDir: String = null) = {
+    val repo = Option(workingDir)
+      .filter(_.nonEmpty)
+      .map(os.Path(_, BuildCtx.workspaceRoot))
+      .getOrElse(BuildCtx.workspaceRoot / "working-dir")
     Task.Command {
-      os.list(repo).foreach(os.remove.all)
       `windows-jni-utils`.publishM2Local(m2RepoPath = repo.toString)()
       `windows-jni-utils-graalvm`.publishM2Local(m2RepoPath = repo.toString)()
       `windows-jni-utils-bootstrap`.publishM2Local(m2RepoPath = repo.toString)()
       `windows-jni-utils-lmcoursier`.publishM2Local(m2RepoPath = repo.toString)()
       `windows-jni-utils-coursierapi`.publishM2Local(m2RepoPath = repo.toString)()
-      `windows-jni-utils-tests`.publishM2Local(m2RepoPath = repo.toString)()
-      val zip = os.Path(output, os.pwd)
+      val zip = os.Path(output, BuildCtx.workspaceRoot)
       PathRef(os.zip(zip, Seq(repo)))
     }
   }
