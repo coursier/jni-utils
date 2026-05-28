@@ -22,7 +22,7 @@ jobs:
           mill-build
 
   test:
-    name: Test ${{ matrix.id }}
+    name: Test (${{ matrix.runner }})
     strategy:
       fail-fast: false
       matrix:
