@@ -13,13 +13,6 @@ should be needed to build it.
 
 ### Requirements
 
-#### JVM
-
-A JVM, such as AdoptOpenJDK 8 or 11, is required.
-To check if such a JVM is installed, run
-`java -version`, and check that it prints a version
-higher than or equal to `8`.
-
 #### Visual C++
 
 A Visual Studio installation with Visual C++ is required.
