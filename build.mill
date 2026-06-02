@@ -4,20 +4,14 @@ package build
 
 import coursier.core.Repository
 import mill.*
-import mill.api.BuildCtx
+import mill.api.{BuildCtx, Result}
+import mill.javalib.{PublishModule, SonatypeCentralPublishModule}
+import mill.javalib.publish.Artifact
 import mill.scalalib.*
 import millbuild.*
 
-import java.io.FileInputStream
-import java.net.URI
-import java.net.http.{HttpClient, HttpRequest, HttpResponse}
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
-import java.util.Base64
-
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
-import scala.util.Using
 
 object `windows-jni-utils` extends MavenModule with JniUtilsPublishVersion with HasCSources with JniUtilsPublishModule with WithDllNameJava {
   def linkingLibs = Seq("ole32", "shell32", "advapi32", "kernel32")
@@ -144,19 +138,6 @@ trait WindowsUtils extends MavenModule with JniUtilsPublishVersion {
 
 object ci extends Module {
 
-  private def hexDigest(path: os.Path, algorithm: String): String = {
-    val digest = MessageDigest.getInstance(algorithm)
-    val buffer = Array.ofDim[Byte](64 * 1024)
-    Using.resource(os.read.inputStream(path)) { is =>
-      var read = is.read(buffer)
-      while (read >= 0) {
-        if (read > 0) digest.update(buffer, 0, read)
-        read = is.read(buffer)
-      }
-    }
-    digest.digest().map(b => "%02x".format(b & 0xff)).mkString
-  }
-
   def collectNativeArtifacts(outputDir: String) = Task.Command {
     val dir = os.Path(outputDir, os.pwd)
     os.copy(`windows-jni-utils`.dll().path, dir / "csjniutils.dll", createFolders = true, replaceExisting = true)
@@ -180,66 +161,55 @@ object ci extends Module {
     }
   }
 
-  def publishLocalM2Contents(inputZip: String) = Task.Command {
-    val repo = os.unzip(os.Path(inputZip, os.pwd), Task.dest / "m2-repository")
+  // The modules whose artifacts are packaged by `packageLocalM2` and thus
+  // present in the Maven repository archive consumed below.
+  private def publishedModules: Seq[PublishModule] = Seq(
+    `windows-jni-utils`,
+    `windows-jni-utils-graalvm`,
+    `windows-jni-utils-bootstrap`,
+    `windows-jni-utils-lmcoursier`,
+    `windows-jni-utils-coursierapi`
+  )
 
-    val bundleRoot = Task.dest / "central-bundle"
-    os.copy(repo / "io", bundleRoot / "io", createFolders = true, mergeFolders = true)
+  // Reads the files already published in the Maven repository layout for the
+  // given artifact, skipping checksums/signatures/metadata which Mill (re)generates.
+  private def publishDataFrom(repo: os.Path, artifact: Artifact): PublishModule.PublishData = {
+    val dir = repo / os.SubPath(artifact.group.replace('.', '/')) / artifact.id / artifact.version
+    val prefix = s"${artifact.id}-${artifact.version}"
+    val payload = os.list(dir)
+      .filter(os.isFile)
+      .filter(p => p.last.startsWith(prefix) && !Set("asc", "md5", "sha1")(p.ext))
+      .map(p => os.SubPath(p.last) -> PathRef(p))
+      .toMap
+    PublishModule.PublishData(artifact, payload)
+  }
 
-    for {
-      path <- os.walk(bundleRoot) if os.isFile(path)
-      name = path.last
-      if name == "maven-metadata-local.xml" ||
-        name == "_remote.repositories" ||
-        name == "resolver-status.properties" ||
-        name.endsWith(".lastUpdated")
-    } os.remove(path)
-
-    val secretBase64 = sys.env.getOrElse("MILL_PGP_SECRET_BASE64", sys.error("MILL_PGP_SECRET_BASE64 not set"))
-    val passphrase = sys.env.getOrElse("MILL_PGP_PASSPHRASE", sys.error("MILL_PGP_PASSPHRASE not set"))
-    val username = sys.env.getOrElse("MILL_SONATYPE_USERNAME", sys.error("MILL_SONATYPE_USERNAME not set"))
-    val password = sys.env.getOrElse("MILL_SONATYPE_PASSWORD", sys.error("MILL_SONATYPE_PASSWORD not set"))
-
-    val keyPath = Task.dest / "publish-key.asc"
-    os.write.over(keyPath, Base64.getDecoder.decode(secretBase64))
-    os.proc("gpg", "--batch", "--import", keyPath).call(stdout = os.Inherit, stderr = os.Inherit)
-
-    for (file <- os.walk(bundleRoot) if os.isFile(file) && !Set("asc", "md5", "sha1")(file.ext)) {
-      os.proc(
-        "gpg", "--batch", "--yes", "--pinentry-mode", "loopback", "--passphrase", passphrase,
-        "--armor", "--detach-sign", file
-      ).call(stdout = os.Inherit, stderr = os.Inherit)
-      os.write.over(file / os.up / s"${file.last}.md5", hexDigest(file, "MD5"))
-      os.write.over(file / os.up / s"${file.last}.sha1", hexDigest(file, "SHA-1"))
+  // Publishes the contents of a Maven repository archive (as produced by
+  // `packageLocalM2`) to Sonatype Central. Signing, checksumming, bundling and
+  // uploading are all delegated to `SonatypeCentralPublishModule.publishAll`,
+  // which reads its credentials and PGP key from the MILL_SONATYPE_* and
+  // MILL_PGP_* environment variables.
+  def publishLocalM2Contents(inputZip: String): Task.Command[Unit] = {
+    lazy val repo: os.Path = {
+      val dir = os.temp.dir(prefix = "jni-utils-m2-")
+      os.unzip(os.Path(inputZip, os.pwd), dir)
+      dir
     }
 
-    val bundle = os.zip(Task.dest / "central-bundle.zip", Seq(bundleRoot))
-    val token = Base64.getEncoder.encodeToString(
-      s"$username:$password".getBytes(StandardCharsets.UTF_8)
+    val publishArtifacts = publishedModules.map { module =>
+      new Task.Computed[PublishModule.PublishData](
+        inputs = Seq(module.artifactMetadata.asInstanceOf[mill.api.Task[Any]]),
+        evaluate0 =
+          (args, _) => Result.Success(publishDataFrom(repo, args(0).asInstanceOf[Artifact])),
+        ctx0 = module.moduleCtx,
+        readWriter = PublishModule.PublishData.jsonify,
+        isPrivate = None,
+        persistent = false
+      )
+    }
+
+    SonatypeCentralPublishModule.publishAll(
+      publishArtifacts = mill.util.Tasks(publishArtifacts)
     )
-    val deploymentName = Seq(
-      "jni-utils",
-      sys.env.getOrElse("GITHUB_REF_NAME", "local"),
-      sys.env.getOrElse("GITHUB_SHA", "unknown")
-    ).mkString("-")
-    val uri =
-      s"https://central.sonatype.com/api/v1/publisher/upload?name=$deploymentName&publishingType=AUTOMATIC"
-    val boundary = java.util.UUID.randomUUID().toString.replace("-", "")
-    val fileBytes = os.read.bytes(bundle)
-    val bodyBytes =
-      s"--$boundary\r\nContent-Disposition: form-data; name=\"bundle\"; filename=\"${bundle.last}\"\r\nContent-Type: application/octet-stream\r\n\r\n".getBytes(StandardCharsets.UTF_8) ++
-      fileBytes ++
-      s"\r\n--$boundary--\r\n".getBytes(StandardCharsets.UTF_8)
-    val client = HttpClient.newHttpClient()
-    val request = HttpRequest.newBuilder()
-      .uri(URI.create(uri))
-      .header("Authorization", s"Bearer $token")
-      .header("Content-Type", s"multipart/form-data; boundary=$boundary")
-      .POST(HttpRequest.BodyPublishers.ofByteArray(bodyBytes))
-      .build()
-    val response = client.send(request, HttpResponse.BodyHandlers.ofString())
-    print(response.body())
-    if (response.statusCode() >= 400)
-      sys.error(s"Upload failed with status ${response.statusCode()}")
   }
 }
