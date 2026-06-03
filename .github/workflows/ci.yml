@@ -43,7 +43,7 @@ jobs:
       run: ./mill -i __.test
     - name: Collect native artifacts
       run: ./mill -i ci.collectNativeArtifacts --output-dir "${{ runner.temp }}/${{ matrix.id }}-native"
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: ${{ matrix.id }}-native
         path: ${{ runner.temp }}/${{ matrix.id }}-native
@@ -73,7 +73,7 @@ jobs:
       env:
         JNI_UTILS_WINDOWS_ARM64_ARTIFACTS_DIR: ${{ runner.temp }}/windows-arm64-native
         JNI_UTILS_WINDOWS_X86_64_ARTIFACTS_DIR: ${{ runner.temp }}/windows-x86-64-native
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: m2-repo
         path: ${{ runner.temp }}/m2-repo.zip
