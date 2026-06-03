@@ -57,11 +57,11 @@ jobs:
       with:
         fetch-depth: 0
     - uses: coursier/cache-action@v8
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v8
       with:
         name: windows-arm64-native
         path: ${{ runner.temp }}/windows-arm64-native
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v8
       with:
         name: windows-x86-64-native
         path: ${{ runner.temp }}/windows-x86-64-native
@@ -93,7 +93,7 @@ jobs:
       with:
         fetch-depth: 0
     - uses: coursier/cache-action@v8
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v8
       with:
         name: m2-repo
         path: ${{ runner.temp }}
@@ -113,7 +113,7 @@ jobs:
       with:
         fetch-depth: 0
     - uses: coursier/cache-action@v8
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v8
       with:
         name: m2-repo
         path: ${{ runner.temp }}
