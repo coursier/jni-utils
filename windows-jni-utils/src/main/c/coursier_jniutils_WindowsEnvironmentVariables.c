@@ -6,6 +6,18 @@
 #include <windows.h>
 #include "coursier_jniutils_DefaultNativeApi.h"
 
+/* Windows only expands references to other environment variables, like "%JAVA_HOME%\bin",
+   in values stored as REG_EXPAND_SZ. Like the System Properties environment variable dialog,
+   we store values containing a '%' that way, and the other ones as plain REG_SZ. */
+static DWORD userEnvironmentVariableType(const jbyte *value, size_t len) {
+  size_t i;
+  for (i = 0; i < len && value[i] != '\0'; i++) {
+    if (value[i] == '%')
+      return REG_EXPAND_SZ;
+  }
+  return REG_SZ;
+}
+
 JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_DefaultNativeApi_SetUserEnvironmentVariableNative
   (JNIEnv *env, jclass class, jbyteArray key, jbyteArray value) {
 
@@ -17,7 +29,7 @@ JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_DefaultNativeApi_SetUserEnvi
     HKEY_CURRENT_USER,
     "Environment",
     keyStr,
-    REG_SZ,
+    userEnvironmentVariableType(valueStr, valueLen),
     valueStr,
     valueLen
   );
@@ -44,13 +56,19 @@ JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_DefaultNativeApi_GetUserEnvi
 
   DWORD type = 0;
 
+  /* RRF_NOEXPAND keeps REG_EXPAND_SZ values as they are stored, rather than expanding the
+     references to other environment variables they contain. Callers that read a value, edit
+     it, and write it back - like coursier's WindowsEnvVarUpdater - would otherwise replace
+     those references by whatever they happened to expand to. */
+  const DWORD flags = RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ | RRF_NOEXPAND;
+
   DWORD size = 1;
   char dummy = 0;
   LSTATUS status = RegGetValueA(
     HKEY_CURRENT_USER,
     "Environment",
     keyStr,
-    RRF_RT_REG_SZ,
+    flags,
     &type,
     &dummy,
     &size
@@ -71,7 +89,7 @@ JNIEXPORT jbyteArray JNICALL Java_coursier_jniutils_DefaultNativeApi_GetUserEnvi
       HKEY_CURRENT_USER,
       "Environment",
       keyStr,
-      RRF_RT_REG_SZ,
+      flags,
       &type,
       &data[1],
       &size
