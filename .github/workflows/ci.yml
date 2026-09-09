@@ -115,12 +115,27 @@ jobs:
     - uses: coursier/cache-action@v8
     - uses: actions/download-artifact@v8
       with:
-        name: m2-repo
-        path: ${{ runner.temp }}
-    - name: Publish local Maven repo contents
+        name: windows-arm64-native
+        path: ${{ runner.temp }}/windows-arm64-native
+    - uses: actions/download-artifact@v8
+      with:
+        name: windows-x86-64-native
+        path: ${{ runner.temp }}/windows-x86-64-native
+    - name: Publish
+      shell: bash
       env:
         MILL_PGP_SECRET_BASE64: ${{ secrets.PUBLISH_SECRET_KEY }}
         MILL_PGP_PASSPHRASE: ${{ secrets.PUBLISH_SECRET_KEY_PASSWORD }}
         MILL_SONATYPE_USERNAME: ${{ secrets.PUBLISH_USER }}
         MILL_SONATYPE_PASSWORD: ${{ secrets.PUBLISH_PASSWORD }}
-      run: ./mill -i ci.publishLocalM2Contents --input-zip "${{ runner.temp }}/m2-repo.zip"
+        JNI_UTILS_WINDOWS_ARM64_ARTIFACTS_DIR: ${{ runner.temp }}/windows-arm64-native
+        JNI_UTILS_WINDOWS_X86_64_ARTIFACTS_DIR: ${{ runner.temp }}/windows-x86-64-native
+      run: |
+        if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+          ./mill -i mill.scalalib.SonatypeCentralPublishModule/ --bundleName "coursier-jni-utils-${GITHUB_REF#refs/tags/v}"
+        else
+          for tag in $(git tag --points-at HEAD); do
+            git tag -d "$tag"
+          done
+          ./mill -i mill.scalalib.SonatypeCentralPublishModule/
+        fi

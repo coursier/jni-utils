@@ -1,8 +1,9 @@
 package millbuild
 
 import mill.*, scalalib.*
+import mill.api.BuildCtx
 import mill.scalalib.publish.PublishInfo
-import mill.util.VcsVersion
+import mill.util.Jvm
 import org.codehaus.plexus.archiver.zip.ZipUnArchiver
 
 import java.util.Locale
@@ -282,26 +283,49 @@ trait HasCSources extends JavaModule with PublishModule {
   }
 }
 
-trait JniUtilsPublishVersion extends Module {
-  def publishVersion = Task {
-    val state = VcsVersion.vcsState()
-    if (state.commitsSinceLastTag > 0) {
-      val versionOrEmpty = state.lastTag
-        .map(_.stripPrefix("v"))
-        .map { tag =>
-          val idx = tag.lastIndexOf(".")
-          if (idx >= 0) tag.take(idx + 1) + (tag.drop(idx + 1).toInt + 1).toString + "-SNAPSHOT"
-          else ""
+object JniUtilsPublishVersion {
+
+  private def gitOutput(args: String*): Option[String] = {
+    val res = os.proc("git" +: args)
+      .call(cwd = BuildCtx.workspaceRoot, check = false, stderr = os.Pipe)
+    Option.when(res.exitCode == 0)(res.out.trim()).filter(_.nonEmpty)
+  }
+
+  /** The "v*" tag HEAD is on, if any (the highest one, if HEAD has several) */
+  private def tagAtHead: Option[String] =
+    gitOutput("tag", "--points-at", "HEAD", "--sort=-v:refname")
+      .iterator
+      .flatMap(_.linesIterator)
+      .map(_.trim)
+      .find(_.startsWith("v"))
+
+  /** The latest "v*" tag in the history of HEAD, if any */
+  private def latestTag: Option[String] =
+    gitOutput("describe", "--tags", "--abbrev=0", "--match", "v*", "HEAD")
+
+  /** 0.1.2 (or 0.1.2.3) -> 0.1.3-SNAPSHOT */
+  private def nextSnapshotVersion(tag: String): String = {
+    val version = tag.stripPrefix("v")
+    version.split('.').take(3) match {
+      case Array(major, minor, patch) =>
+        val patch0 = patch.toIntOption.getOrElse {
+          sys.error(s"Malformed tag '$tag' (expected an int at the third position, got '$patch')")
         }
-        .getOrElse("0.0.1-SNAPSHOT")
-      Some(versionOrEmpty)
-        .filter(_.nonEmpty)
-        .getOrElse(state.format())
-    } else
-      state
-        .lastTag
-        .getOrElse(state.format())
-        .stripPrefix("v")
+        s"$major.$minor.${patch0 + 1}-SNAPSHOT"
+      case _ =>
+        sys.error(s"Malformed tag '$tag' (expected at least 3 '.'-separated parts)")
+    }
+  }
+
+  def compute(): String =
+    tagAtHead.map(_.stripPrefix("v")).getOrElse {
+      latestTag.fold("0.0.1-SNAPSHOT")(nextSnapshotVersion)
+    }
+}
+
+trait JniUtilsPublishVersion extends Module {
+  def publishVersion = Task.Input {
+    JniUtilsPublishVersion.compute()
   }
 }
 
@@ -317,6 +341,12 @@ trait JniUtilsPublishModule extends PublishModule with JniUtilsPublishVersion {
       Developer("alexarchambault", "Alex Archambault","https://github.com/alexarchambault")
     )
   )
+
+  // These modules are Java-only wrappers around native code, whose API is documented
+  // in the C sources - don't bother generating and publishing actual Javadoc for them.
+  def docJar = Task {
+    PathRef(Jvm.createJar(Task.dest / "out.jar", Seq.empty[os.Path], manifest()))
+  }
 }
 
 trait WithDllNameJava extends JavaModule {
