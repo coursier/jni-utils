@@ -38,10 +38,6 @@ object `windows-jni-utils` extends MavenModule with JniUtilsPublishVersion with 
   )
 }
 
-object `windows-jni-utils-graalvm` extends WindowsUtils with JniUtilsPublishModule {
-  def moduleDeps = Seq(`windows-jni-utils`)
-}
-
 object `windows-jni-utils-bootstrap` extends WindowsUtils with JniUtilsPublishModule {
   def moduleDeps = Seq(`windows-jni-utils`)
 }
@@ -130,7 +126,6 @@ object headers extends Module {
 }
 
 trait WindowsUtils extends MavenModule with JniUtilsPublishVersion {
-  def compileMvnDeps = Seq(Deps.svm)
   def javacOptions = super.javacOptions() ++ Seq(
     "--release", "8"
   )
@@ -152,7 +147,6 @@ object ci extends Module {
       .getOrElse(BuildCtx.workspaceRoot / "working-dir")
     Task.Command {
       `windows-jni-utils`.publishM2Local(m2RepoPath = repo.toString)()
-      `windows-jni-utils-graalvm`.publishM2Local(m2RepoPath = repo.toString)()
       `windows-jni-utils-bootstrap`.publishM2Local(m2RepoPath = repo.toString)()
       `windows-jni-utils-lmcoursier`.publishM2Local(m2RepoPath = repo.toString)()
       `windows-jni-utils-coursierapi`.publishM2Local(m2RepoPath = repo.toString)()
@@ -165,7 +159,6 @@ object ci extends Module {
   // present in the Maven repository archive consumed below.
   private def publishedModules: Seq[PublishModule] = Seq(
     `windows-jni-utils`,
-    `windows-jni-utils-graalvm`,
     `windows-jni-utils-bootstrap`,
     `windows-jni-utils-lmcoursier`,
     `windows-jni-utils-coursierapi`
