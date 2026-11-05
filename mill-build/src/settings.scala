@@ -4,7 +4,6 @@ import mill.*, scalalib.*
 import mill.api.BuildCtx
 import mill.scalalib.publish.PublishInfo
 import mill.util.Jvm
-import org.codehaus.plexus.archiver.zip.ZipUnArchiver
 
 import java.util.Locale
 
