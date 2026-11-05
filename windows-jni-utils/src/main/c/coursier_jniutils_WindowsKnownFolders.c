@@ -41,6 +41,7 @@ JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_GetKnownFolder
     return NULL;
   }
 
+  /* ppszPath has to be freed with CoTaskMemFree even if SHGetKnownFolderPath fails. */
   WCHAR *ppszPath = NULL;
   res = SHGetKnownFolderPath(&id, 0, NULL, &ppszPath);
   if (res != 0) {
