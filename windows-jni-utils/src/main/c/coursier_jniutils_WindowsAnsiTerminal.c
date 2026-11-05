@@ -17,6 +17,8 @@ jstring _Java_coursier_jniutils_DefaultNativeApi_Terminal_lastError
   DWORD err = GetLastError();
   char dummy[1];
   const int len = snprintf(dummy, 1, "error:%s error %lu", origin, err);
+  if (len < 0)
+    return (*env)->NewStringUTF(env, "error:cannot format error message");
   char *buf = malloc((size_t) len + 1);
   if (buf == NULL) {
     _Java_coursier_jniutils_DefaultNativeApi_Terminal_throwOutOfMemory(env);
@@ -36,6 +38,8 @@ jstring _Java_coursier_jniutils_DefaultNativeApi_Terminal_format
   va_start(ap, format);
   const int len = vsnprintf(dummy, 1, format, ap);
   va_end(ap);
+  if (len < 0)
+    return (*env)->NewStringUTF(env, "error:cannot format output");
   char *buf = malloc((size_t) len + 1);
   if (buf == NULL) {
     _Java_coursier_jniutils_DefaultNativeApi_Terminal_throwOutOfMemory(env);
