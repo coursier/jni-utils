@@ -26,6 +26,9 @@ JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_GetKnownFolder
 
   long res = 0;
 
+  if (rfid == NULL)
+    return NULL;
+
   WCHAR *rfidStr = toWide(env, rfid);
   if (rfidStr == NULL)
     return NULL;
