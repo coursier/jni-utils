@@ -27,8 +27,8 @@ public final class LoadWindowsLibrary {
                     File f;
                     try {
                         f = new File(url.toURI()).getAbsoluteFile();
-                    } catch (URISyntaxException ex) {
-                        throw new RuntimeException(ex);
+                    } catch (URISyntaxException | IllegalArgumentException ex) {
+                        continue;
                     }
                     if (f.getName().equals(dllName() + ".dll") && f.isFile())
                         return f;
@@ -36,17 +36,22 @@ public final class LoadWindowsLibrary {
             }
         } else if (cl.getClass().getName().startsWith("jdk.internal.loader.ClassLoaders$AppClassLoader")) {
             String strCp = System.getProperty("java.class.path");
-            for (String elem: strCp.split(File.pathSeparator)) {
-                File f = new File(elem).getAbsoluteFile();
-                if (f.getName().equals(dllName() + ".dll") && f.isFile())
-                    return f;
-            }
+            if (strCp != null)
+                for (String elem: strCp.split(File.pathSeparator)) {
+                    if (elem.isEmpty())
+                        continue;
+                    File f = new File(elem).getAbsoluteFile();
+                    if (f.getName().equals(dllName() + ".dll") && f.isFile())
+                        return f;
+                }
         }
 
         return fromClassPath(cl.getParent());
     }
 
     static File fromResources(ClassLoader cl) throws IOException, URISyntaxException {
+        if (cl == null)
+            return null;
         URL url = cl.getResource(dllResourcePath());
         if (url == null)
           return null;
@@ -78,11 +83,19 @@ public final class LoadWindowsLibrary {
         if (!initialized) {
             synchronized (lock) {
                 if (!initialized) {
-                    ClassLoader cl = Thread.currentThread().getContextClassLoader();
-                    File dll = fromClassPath(cl);
+                    // Look for the DLL via the thread context class loader first (if it isn't
+                    // null), so that users can override the DLL via it, and via our own class
+                    // loader (the one of the JAR having the DLL) as a fallback.
+                    ClassLoader contextCl = Thread.currentThread().getContextClassLoader();
+                    ClassLoader ownCl = LoadWindowsLibrary.class.getClassLoader();
+                    File dll = fromClassPath(contextCl);
+                    if (dll == null && ownCl != contextCl)
+                        dll = fromClassPath(ownCl);
                     if (dll == null)
                         try {
-                            dll = fromResources(cl);
+                            dll = fromResources(contextCl);
+                            if (dll == null && ownCl != contextCl)
+                                dll = fromResources(ownCl);
                         } catch (URISyntaxException | IOException ex) {
                             throw new RuntimeException(ex);
                         }
