@@ -150,23 +150,23 @@ trait HasCSources extends JavaModule with PublishModule {
         Nil
     }
     val javaHome0 = os.Path(windowsJavaHome())
-    for (f <- cFiles) yield {
-      if (!os.exists(destDir))
-        os.makeDir.all(destDir)
-      val output = destDir / s"${f.last.stripSuffix(".c")}.obj"
-      val needsUpdate = !os.isFile(output) || os.mtime(output) < os.mtime(f)
-      if (needsUpdate) {
-        val script =
-         s"""@call "$vcvars"
-            |if %errorlevel% neq 0 exit /b %errorlevel%
-            |cl /I $q${javaHome0 / "include"}$q /I $q${javaHome0 / "include/win32"}$q /utf-8 /c $q$f$q
-            |""".stripMargin
-        val scriptPath = Task.dest / "run-cl.bat"
-        os.write.over(scriptPath, script.getBytes, createFolders = true)
-        os.proc(scriptPath).call(cwd = destDir)
-      }
-      PathRef(output.resolveFrom(os.pwd))
+    val objFiles = cFiles.map(f => f -> destDir / s"${f.last.stripSuffix(".c")}.obj")
+    val outdated = objFiles.collect {
+      case (f, output) if !os.isFile(output) || os.mtime(output) < os.mtime(f) => f
     }
+    // Compile all out-of-date files at once, so that vcvars only runs once
+    if (outdated.nonEmpty) {
+      os.makeDir.all(destDir)
+      val script =
+       s"""@call "$vcvars"
+          |if %errorlevel% neq 0 exit /b %errorlevel%
+          |cl /I $q${javaHome0 / "include"}$q /I $q${javaHome0 / "include/win32"}$q /utf-8 /c ${outdated.map(f => s"$q$f$q").mkString(" ")}
+          |""".stripMargin
+      val scriptPath = Task.dest / "run-cl.bat"
+      os.write.over(scriptPath, script.getBytes, createFolders = true)
+      os.proc(scriptPath).call(cwd = destDir)
+    }
+    objFiles.map { case (_, output) => PathRef(output) }
   }
   def cLib = platformArtifactsDirOpt match {
     case Some(platformArtifactsDir) =>
