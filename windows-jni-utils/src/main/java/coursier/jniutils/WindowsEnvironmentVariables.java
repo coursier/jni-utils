@@ -2,8 +2,23 @@ package coursier.jniutils;
 
 import java.io.IOException;
 
+/**
+ * The persistent environment variables of the current user, stored in the registry under
+ * HKEY_CURRENT_USER\Environment.
+ *
+ * These are not the environment variables of the current process: changes made here don't
+ * affect it, nor already running processes. No WM_SETTINGCHANGE message is broadcast either.
+ */
 public final class WindowsEnvironmentVariables {
 
+    /**
+     * The value of a user environment variable, or null if it's not set.
+     *
+     * Values of type REG_EXPAND_SZ are returned as is, without expanding the variables they
+     * reference.
+     *
+     * @throws IOException if the registry can't be read
+     */
     public static String get(String key) throws IOException {
         String value = NativeApi.get().GetUserEnvironmentVariable(key);
         if (value == null)
@@ -14,6 +29,13 @@ public final class WindowsEnvironmentVariables {
         return value.substring(1);
     }
 
+    /**
+     * Sets a user environment variable, creating it if needed.
+     *
+     * Values containing a '%' are stored as REG_EXPAND_SZ, other ones as REG_SZ.
+     *
+     * @throws IOException if the registry can't be written
+     */
     public static void set(String key, String value) throws IOException {
         String ret = NativeApi.get().SetUserEnvironmentVariable(key, value);
         if (ret.startsWith("E"))
@@ -21,6 +43,11 @@ public final class WindowsEnvironmentVariables {
                     "Error setting user environment variable " + key + ": " + ret.substring("E".length()));
     }
 
+    /**
+     * Deletes a user environment variable. Does nothing if it's not set.
+     *
+     * @throws IOException if the variable can't be deleted
+     */
     public static void delete(String key) throws IOException {
         String ret = NativeApi.get().DeleteUserEnvironmentVariable(key);
         if (ret.startsWith("E"))

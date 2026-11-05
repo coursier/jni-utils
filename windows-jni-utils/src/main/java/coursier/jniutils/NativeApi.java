@@ -5,6 +5,16 @@ import java.lang.reflect.Method;
 import java.util.Iterator;
 import java.util.ServiceLoader;
 
+/**
+ * The native methods of this library.
+ *
+ * Users shouldn't need to call these directly, and should rather use the classes wrapping
+ * them, like {@link WindowsAnsiTerminal} or {@link WindowsEnvironmentVariables}.
+ *
+ * Several implementations exist, whose native methods are bound to the same DLL: one per
+ * project shading this library, as shading changes the names of the classes the JNI functions
+ * are looked up from.
+ */
 public abstract class NativeApi {
 
     public abstract String terminalSize();
@@ -24,6 +34,14 @@ public abstract class NativeApi {
 
     private static NativeApi instance = null;
 
+    /**
+     * The implementation to use.
+     *
+     * That's the one passed to {@link #set}, if any, else the first {@code NativeApi} service
+     * found by {@link ServiceLoader}, else the first {@link LowPriorityNativeApi} one.
+     *
+     * This loads the native library, if it's not loaded already.
+     */
     public static NativeApi get() {
         Class<NativeApi> nativeApiClass = NativeApi.class;
         Class<LowPriorityNativeApi> lowPriorityNativeApiClass = LowPriorityNativeApi.class;
@@ -47,6 +65,7 @@ public abstract class NativeApi {
         return instance;
     }
 
+    /** Forces the implementation returned by {@link #get}, or resets it if passed null. */
     public static void set(NativeApi nativeApi) {
         instance = nativeApi;
     }

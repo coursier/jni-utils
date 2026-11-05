@@ -8,6 +8,12 @@ import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Locale;
 
+/**
+ * Loads the DLL of this library.
+ *
+ * It's looked for, in that order, directly on the class path, as a resource of the JAR
+ * (extracted to a temporary file if needed), and in java.library.path.
+ */
 public final class LoadWindowsLibrary {
 
     static File fromClassPath(ClassLoader cl) {
@@ -56,15 +62,18 @@ public final class LoadWindowsLibrary {
         }
     }
 
+    /** Assumes the DLL is already loaded, or its native code is otherwise available. */
     public static void assumeInitialized() {
         assumeInitialized(true);
     }
+    /** Sets whether the DLL should be assumed to be loaded already. */
     public static void assumeInitialized(boolean initialized) {
         LoadWindowsLibrary.initialized = initialized;
     }
 
     final static Object lock = new Object();
     static boolean initialized = false;
+    /** Loads the DLL, unless it's already loaded or assumed to be. */
     public static void ensureInitialized() {
         if (!initialized) {
             synchronized (lock) {
