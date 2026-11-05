@@ -32,7 +32,8 @@ public abstract class NativeApi {
     public abstract int GetOEMCodePage();
 
 
-    private static NativeApi instance = null;
+    private static volatile NativeApi instance = null;
+    private static final Object lock = new Object();
 
     /**
      * The implementation to use.
@@ -43,26 +44,47 @@ public abstract class NativeApi {
      * This loads the native library, if it's not loaded already.
      */
     public static NativeApi get() {
-        Class<NativeApi> nativeApiClass = NativeApi.class;
-        Class<LowPriorityNativeApi> lowPriorityNativeApiClass = LowPriorityNativeApi.class;
+        NativeApi instance0 = instance;
+        if (instance0 != null)
+            return instance0;
 
-        if (instance == null) {
-            LoadWindowsLibrary.ensureInitialized();
-            Iterator<NativeApi> iterator = ServiceLoader.load(nativeApiClass).iterator();
+        synchronized (lock) {
+            instance0 = instance;
+            if (instance0 == null) {
+                Class<NativeApi> nativeApiClass = NativeApi.class;
+                Class<LowPriorityNativeApi> lowPriorityNativeApiClass = LowPriorityNativeApi.class;
+
+                LoadWindowsLibrary.ensureInitialized();
+
+                NativeApi found = firstService(nativeApiClass);
+                if (found == null)
+                    found = firstService(lowPriorityNativeApiClass);
+
+                if (found == null)
+                    throw new RuntimeException("No NativeApi instance available. Could not load a Service for " + nativeApiClass + " or " + lowPriorityNativeApiClass);
+
+                instance = found;
+                instance0 = found;
+            }
+            return instance0;
+        }
+    }
+
+    /**
+     * Looks for services via the thread context class loader, then via the class loader of
+     * this class.
+     */
+    private static <T> T firstService(Class<T> clazz) {
+        Iterator<T> iterator = ServiceLoader.load(clazz).iterator();
+        if (iterator.hasNext())
+            return iterator.next();
+        ClassLoader ownCl = NativeApi.class.getClassLoader();
+        if (ownCl != null && ownCl != Thread.currentThread().getContextClassLoader()) {
+            iterator = ServiceLoader.load(clazz, ownCl).iterator();
             if (iterator.hasNext())
-                instance = iterator.next();
+                return iterator.next();
         }
-
-        if (instance == null) {
-            Iterator<LowPriorityNativeApi> lowPriorityIterator = ServiceLoader.load(lowPriorityNativeApiClass).iterator();
-            if (lowPriorityIterator.hasNext())
-                instance = lowPriorityIterator.next();
-        }
-
-        if (instance == null)
-            throw new RuntimeException("No NativeApi instance available. Could not load a Service for " + nativeApiClass + " or " + lowPriorityNativeApiClass);
-
-        return instance;
+        return null;
     }
 
     /** Forces the implementation returned by {@link #get}, or resets it if passed null. */
