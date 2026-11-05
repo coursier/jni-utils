@@ -68,7 +68,7 @@ JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_enableAnsiOutp
   if (!(mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING)) {
     res = SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
     if (!res) {
-      return _Java_coursier_jniutils_DefaultNativeApi_Terminal_lastError(env, "GetConsoleMode");
+      return _Java_coursier_jniutils_DefaultNativeApi_Terminal_lastError(env, "SetConsoleMode");
     }
     ret = "true";
   }
