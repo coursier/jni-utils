@@ -78,7 +78,11 @@ JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_terminalSizeNa
     return _Java_coursier_jniutils_DefaultNativeApi_Terminal_lastError(env, "GetConsoleScreenBufferInfo");
   }
 
-  return _Java_coursier_jniutils_DefaultNativeApi_Terminal_format(env, "%hu:%hu", info.dwSize.X, info.dwSize.Y);
+  /* dwSize is the size of the whole screen buffer, whose height includes the scrollback
+     (often 9001 lines); srWindow is the visible part of it, with inclusive bounds. */
+  const int width = info.srWindow.Right - info.srWindow.Left + 1;
+  const int height = info.srWindow.Bottom - info.srWindow.Top + 1;
+  return _Java_coursier_jniutils_DefaultNativeApi_Terminal_format(env, "%d:%d", width, height);
 }
 
 JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_enableAnsiOutputNative

@@ -6,12 +6,13 @@ import java.io.IOException;
 public final class WindowsAnsiTerminal {
 
     /**
-     * The size of the console screen buffer, in characters.
+     * The size of the visible console window, in characters.
      *
-     * Its width is usually the one of the console window, but its height can be much larger
-     * than the number of visible lines, as it includes the scrollback.
+     * This is the visible part of the console screen buffer, so its height is the number of
+     * visible lines, not including the scrollback.
      *
-     * @throws IOException if the standard output isn't a console (when it's redirected, say)
+     * @throws IOException if the standard output isn't a console (when it's redirected, say),
+     *                     or if the process has no standard output
      */
     public static TerminalSize terminalSize() throws IOException {
         String value = NativeApi.get().terminalSize();
