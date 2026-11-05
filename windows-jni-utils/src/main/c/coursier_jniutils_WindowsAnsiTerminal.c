@@ -1,15 +1,28 @@
+#include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <windows.h>
 #include "coursier_jniutils_DefaultNativeApi.h"
 
+static void _Java_coursier_jniutils_DefaultNativeApi_Terminal_throwOutOfMemory(JNIEnv *env) {
+  jclass cls = (*env)->FindClass(env, "java/lang/OutOfMemoryError");
+  if (cls != NULL)
+    (*env)->ThrowNew(env, cls, "Cannot allocate terminal message buffer");
+}
+
+/* Returns NULL, with an exception pending, if the message buffer can't be allocated. */
 jstring _Java_coursier_jniutils_DefaultNativeApi_Terminal_lastError
   (JNIEnv *env, const char *origin) {
 
   DWORD err = GetLastError();
   char dummy[1];
   const int len = snprintf(dummy, 1, "error:%s error %lu", origin, err);
-  char *buf = malloc(len + 1);
-  snprintf(buf, len + 1, "error:%s error %lu", origin, err);
+  char *buf = malloc((size_t) len + 1);
+  if (buf == NULL) {
+    _Java_coursier_jniutils_DefaultNativeApi_Terminal_throwOutOfMemory(env);
+    return NULL;
+  }
+  snprintf(buf, (size_t) len + 1, "error:%s error %lu", origin, err);
   const jstring result = (*env)->NewStringUTF(env, buf);
   free(buf);
   return result;
@@ -23,9 +36,13 @@ jstring _Java_coursier_jniutils_DefaultNativeApi_Terminal_format
   va_start(ap, format);
   const int len = vsnprintf(dummy, 1, format, ap);
   va_end(ap);
-  char *buf = malloc(len + 1);
+  char *buf = malloc((size_t) len + 1);
+  if (buf == NULL) {
+    _Java_coursier_jniutils_DefaultNativeApi_Terminal_throwOutOfMemory(env);
+    return NULL;
+  }
   va_start(ap, format);
-  vsnprintf(buf, len + 1, format, ap);
+  vsnprintf(buf, (size_t) len + 1, format, ap);
   va_end(ap);
   const jstring result = (*env)->NewStringUTF(env, buf);
   free(buf);
