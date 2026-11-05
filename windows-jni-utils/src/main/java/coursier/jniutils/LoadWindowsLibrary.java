@@ -72,7 +72,7 @@ public final class LoadWindowsLibrary {
     }
 
     final static Object lock = new Object();
-    static boolean initialized = false;
+    static volatile boolean initialized = false;
     /** Loads the DLL, unless it's already loaded or assumed to be. */
     public static void ensureInitialized() {
         if (!initialized) {
@@ -90,6 +90,7 @@ public final class LoadWindowsLibrary {
                         System.loadLibrary(dllName());
                     else
                         System.load(dll.getAbsolutePath());
+                    initialized = true;
                 }
             }
         }
