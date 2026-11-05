@@ -3,6 +3,150 @@
 *coursier-jni-utils* is a small library allowing to tap into various Windows
 native APIs from Java / Scala via JNI.
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.get-coursier.jniutils/windows-jni-utils.svg)](https://central.sonatype.com/artifact/io.get-coursier.jniutils/windows-jni-utils)
+
+It's used by [coursier](https://github.com/coursier/coursier) and related
+projects, to enable ANSI output in the Windows console, get or update the user
+environment variables, find well-known folders, etc.
+
+## Usage
+
+### Adding the dependency
+
+The library is published to Maven Central, as
+`io.get-coursier.jniutils:windows-jni-utils`. It's written in Java, and has no
+dependencies.
+
+With Mill:
+```scala
+mvn"io.get-coursier.jniutils:windows-jni-utils:0.4.0"
+```
+
+With sbt:
+```scala
+libraryDependencies += "io.get-coursier.jniutils" % "windows-jni-utils" % "0.4.0"
+```
+
+With Maven:
+```xml
+<dependency>
+  <groupId>io.get-coursier.jniutils</groupId>
+  <artifactId>windows-jni-utils</artifactId>
+  <version>0.4.0</version>
+</dependency>
+```
+
+### Supported platforms
+
+- Windows only, on x86-64 and ARM64. The JAR embeds a DLL for both
+  architectures, and picks the right one at runtime, based on `os.arch`.
+- Java 8 or later.
+
+On Linux or macOS, calling any method relying on native code fails, with an
+`UnsatisfiedLinkError` when the DLL is loaded. Check the OS before calling
+it, like
+```java
+if (System.getProperty("os.name").toLowerCase(java.util.Locale.ROOT).contains("windows")) {
+  // use coursier.jniutils.*
+}
+```
+
+### API
+
+All the classes below are in the `coursier.jniutils` package, and only have
+static methods. The native library is loaded upon the first call to one of
+them.
+
+#### ANSI output and terminal size
+
+```java
+// Enables the processing of ANSI escape sequences in the current console.
+// Returns whether the console mode needed to be changed.
+boolean changed = WindowsAnsiTerminal.enableAnsiOutput();
+
+// Size of the screen buffer of the current console, in characters
+TerminalSize size = WindowsAnsiTerminal.terminalSize();
+int width = size.getWidth();
+int height = size.getHeight();
+```
+
+Note that `terminalSize` returns the size of the console *screen buffer*. Its
+width is usually the one of the window, but its height includes the
+scrollback, and can be much larger than the number of visible lines.
+
+Both methods act on the standard output of the process, and throw an
+`IOException` if it isn't a console (when it's redirected to a file or a pipe,
+for example).
+
+#### User environment variables
+
+```java
+String value = WindowsEnvironmentVariables.get("PATH"); // null if not set
+WindowsEnvironmentVariables.set("FOO", "bar");
+WindowsEnvironmentVariables.delete("FOO");
+```
+
+These read and write the *persistent* environment variables of the current
+user, stored in the registry under `HKEY_CURRENT_USER\Environment` - not the
+environment of the current process. Changes don't affect the current process
+or already running ones. No `WM_SETTINGCHANGE` message is broadcast either, so
+processes started from Explorer only see them once it reloads its environment
+(after logging out and back in, typically). Values containing a `%` are stored as `REG_EXPAND_SZ`, and are read back
+unexpanded. These methods throw an `IOException` if the registry can't be read
+or written.
+
+#### Known folders
+
+```java
+// FOLDERID_RoamingAppData
+String appData = WindowsKnownFolders.knownFolderPath("{3EB685DB-65F9-4CF6-A03A-E3EF65729F3D}");
+```
+
+This calls
+[`SHGetKnownFolderPath`](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shgetknownfolderpath).
+The argument is a
+[`KNOWNFOLDERID`](https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid)
+GUID, *with* its surrounding braces. The method returns `null` if the GUID is
+malformed or the folder can't be found.
+
+#### Module file name
+
+```java
+// Path of the executable of the current process, like C:\...\bin\java.exe
+String path = ModuleFileName.get();
+```
+
+From a GraalVM native image, this is the path of the native executable.
+
+#### Code pages
+
+```java
+int oem = WindowsCodePages.oem();                  // like 437 or 850
+Charset oemCharset = WindowsCodePages.oemCharset(); // like IBM437
+Charset charset = WindowsCodePages.charsetFor(1252); // windows-1252
+```
+
+`oem()` returns the OEM code page of the system, which is the one consoles and
+`cmd.exe` use by default, and which usually differs from the ANSI code page
+that Java uses for `sun.jnu.encoding`. `charsetFor` and `oemCharset` return
+`null` if the JVM has no charset for a code page. `charsetFor` doesn't rely on
+native code, and can be called on any OS.
+
+### GraalVM native image
+
+The JARs ship with the native image configuration they need
+(`META-INF/native-image`), so that the library works in GraalVM native images
+without extra configuration.
+
+Note that only the charsets included at build time are available in a native
+image. Pass `-H:+AddAllCharsets` to `native-image` if `WindowsCodePages.charsetFor`
+or `WindowsCodePages.oemCharset` need to resolve arbitrary code pages.
+
+## License
+
+*coursier-jni-utils* is licensed under the Apache License, version 2.0. See
+[`LICENSE`](LICENSE).
+
 
 ## Developer docs
 
