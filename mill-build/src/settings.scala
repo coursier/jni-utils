@@ -5,6 +5,7 @@ import mill.api.BuildCtx
 import mill.scalalib.publish.PublishInfo
 import mill.util.Jvm
 
+import java.security.MessageDigest
 import java.util.Locale
 
 trait GenerateHeaders extends JavaModule {
@@ -142,31 +143,77 @@ trait HasCSources extends JavaModule with PublishModule {
   def cSources = Task.Sources("src/main/c")
   def cCompile = Task(persistent = true) {
     val destDir = Task.dest / "obj"
-    val cFiles = cSources().flatMap { dir =>
-      if (os.isDir(dir.path))
-        os.walk(dir.path)
-          .filter(p => os.isFile(p) && p.last.endsWith(".c"))
-      else
-        Nil
-    }
+    val stampsFile = Task.dest / "stamps.txt"
+    val dirs = cSources().map(_.path).filter(os.isDir(_))
+    val allFiles = dirs.flatMap(dir => os.walk(dir).filter(os.isFile(_)))
+    val cFiles = allFiles.filter(_.last.endsWith(".c"))
+    val headerFiles = allFiles.filter(_.last.endsWith(".h"))
     val javaHome0 = os.Path(windowsJavaHome())
-    val objFiles = cFiles.map(f => f -> destDir / s"${f.last.stripSuffix(".c")}.obj")
-    val outdated = objFiles.collect {
-      case (f, output) if !os.isFile(output) || os.mtime(output) < os.mtime(f) => f
+    val includeArgs = Seq(javaHome0 / "include", javaHome0 / "include/win32")
+      .map(dir => s"/I $q$dir$q")
+    val options = Seq("/utf-8")
+
+    def sha256(chunks: Seq[Array[Byte]]): String = {
+      val md = MessageDigest.getInstance("SHA-256")
+      for (chunk <- chunks) {
+        md.update(chunk)
+        md.update(0.toByte)
+      }
+      md.digest().map(b => f"$b%02x").mkString
     }
-    // Compile all out-of-date files at once, so that vcvars only runs once
+
+    // Each object file depends on its C source, on all the headers of the C directories,
+    // and on the compiler arguments. Rather than relying on mtimes, we keep a hash of
+    // those for each object file, so that changing any header or option triggers a re-compilation.
+    val commonInputs = (includeArgs ++ options).map(_.getBytes("UTF-8")) ++
+      headerFiles.sortBy(_.toString).flatMap(h => Seq(h.toString.getBytes("UTF-8"), os.read.bytes(h)))
+    val stamps = cFiles.map { f =>
+      val objName = s"${f.last.stripSuffix(".c")}.obj"
+      objName -> sha256(commonInputs ++ Seq(f.toString.getBytes("UTF-8"), os.read.bytes(f)))
+    }
+    val previousStamps =
+      if (os.isFile(stampsFile))
+        os.read.lines(stampsFile)
+          .map(_.split("\t", 2))
+          .collect { case Array(name, hash) => name -> hash }
+          .toMap
+      else
+        Map.empty[String, String]
+
+    val outdated = cFiles.zip(stamps).filter {
+      case (_, (objName, hash)) =>
+        !os.isFile(destDir / objName) || !previousStamps.get(objName).contains(hash)
+    }
+
     if (outdated.nonEmpty) {
       os.makeDir.all(destDir)
+      // Forget about the stamps of the files we're about to re-compile, so that they
+      // get re-compiled again later if compilation fails
+      os.write.over(
+        stampsFile,
+        stamps
+          .filter { case (name, hash) => previousStamps.get(name).contains(hash) }
+          .map { case (name, hash) => s"$name\t$hash\n" }
+          .mkString
+      )
       val script =
        s"""@call "$vcvars"
           |if %errorlevel% neq 0 exit /b %errorlevel%
-          |cl /I $q${javaHome0 / "include"}$q /I $q${javaHome0 / "include/win32"}$q /utf-8 /c ${outdated.map(f => s"$q$f$q").mkString(" ")}
+          |cl ${includeArgs.mkString(" ")} ${options.mkString(" ")} /c ${outdated.map { case (f, _) => s"$q$f$q" }.mkString(" ")}
           |""".stripMargin
       val scriptPath = Task.dest / "run-cl.bat"
       os.write.over(scriptPath, script.getBytes, createFolders = true)
       os.proc(scriptPath).call(cwd = destDir)
+      os.write.over(stampsFile, stamps.map { case (name, hash) => s"$name\t$hash\n" }.mkString)
     }
-    objFiles.map { case (_, output) => PathRef(output) }
+
+    // Remove object files whose C source is gone
+    val objNames = stamps.map(_._1).toSet
+    if (os.isDir(destDir))
+      for (obj <- os.list(destDir) if obj.last.endsWith(".obj") && !objNames(obj.last))
+        os.remove(obj)
+
+    stamps.map { case (objName, _) => PathRef(destDir / objName) }
   }
   def cLib = platformArtifactsDirOpt match {
     case Some(platformArtifactsDir) =>
