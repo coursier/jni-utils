@@ -141,6 +141,11 @@ trait HasCSources extends JavaModule with PublishModule {
   def linkingLibs = Task(Seq.empty[String])
 
   def cSources = Task.Sources("src/main/c")
+
+  // /MT (static CRT, cl's default) is passed explicitly, so that the DLL doesn't depend
+  // on a vcruntime DLL
+  def cOptions = Task(Seq("/O2", "/W4", "/MT", "/utf-8"))
+
   def cCompile = Task(persistent = true) {
     val destDir = Task.dest / "obj"
     val stampsFile = Task.dest / "stamps.txt"
@@ -151,7 +156,7 @@ trait HasCSources extends JavaModule with PublishModule {
     val javaHome0 = os.Path(windowsJavaHome())
     val includeArgs = Seq(javaHome0 / "include", javaHome0 / "include/win32")
       .map(dir => s"/I $q$dir$q")
-    val options = Seq("/utf-8")
+    val options = cOptions()
 
     def sha256(chunks: Seq[Array[Byte]]): String = {
       val md = MessageDigest.getInstance("SHA-256")
