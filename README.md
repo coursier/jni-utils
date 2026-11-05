@@ -194,12 +194,6 @@ Besides the JARs, the DLL and a static library (`.lib`) with the same native
 code are published as separate artifacts of `windows-jni-utils`, with the
 `x86_64-pc-win32` and `arm64-pc-win32` classifiers.
 
-## License
-
-*coursier-jni-utils* is licensed under the Apache License, version 2.0. See
-[`LICENSE`](LICENSE).
-
-
 ## Developer docs
 
 *coursier-jni-utils* is built with [Mill](https://mill-build.org). It comes
@@ -278,3 +272,47 @@ in the registry (`HKEY_CURRENT_USER\Environment`). They use randomly-named
 `COURSIER_JNIUTILS_TEST_*` variables, and delete them afterwards.
 
 On CI, the tests are run both on x86-64 and ARM64 Windows runners.
+
+### Testing the published JARs
+
+The tests can also be run against the published artifacts rather than against
+the modules of the build. Package them in a local Maven repository archive,
+then point `REPO_ARCHIVE` at it:
+```text
+$ ./mill ci.packageLocalM2 --output m2-repo.zip
+$ REPO_ARCHIVE=m2-repo.zip ./mill __.test
+```
+
+### Continuous integration
+
+The [CI workflow](.github/workflows/ci.yml):
+1. builds the DLL and runs the tests on x86-64 and ARM64 Windows,
+2. puts the DLLs of both architectures in the JARs, and packages everything in
+   a local Maven repository archive (`ci.packageLocalM2`),
+3. runs the tests again against that archive, on both architectures,
+4. on pushes to `main` and on tags, publishes the artifacts to Maven Central.
+
+To embed DLLs built elsewhere (like on the runner of the other architecture)
+rather than building them, set `JNI_UTILS_WINDOWS_X86_64_ARTIFACTS_DIR` and / or
+`JNI_UTILS_WINDOWS_ARM64_ARTIFACTS_DIR` to directories containing
+`csjniutils.dll` and `csjniutils.lib` (as written by
+`ci.collectNativeArtifacts`). The DLL of the current architecture is then taken
+from there rather than built, and the one of the other architecture is added
+to the JAR (and published) too.
+
+### Releasing
+
+The version is computed from git tags:
+- if `HEAD` has a `v*` tag, like `v0.4.0`, the version is the tag without its
+  `v` (`0.4.0`),
+- otherwise, it's the next patch version after the latest `v*` tag, as a
+  snapshot (`0.4.1-SNAPSHOT`).
+
+Each push to `main` publishes a snapshot. To cut a release, push a `v*` tag
+(like `v0.4.1`) on a commit of `main`: CI then publishes that version to Maven
+Central.
+
+## License
+
+*coursier-jni-utils* is licensed under the Apache License, version 2.0. See
+[`LICENSE`](LICENSE).
