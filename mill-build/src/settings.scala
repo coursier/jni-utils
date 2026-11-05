@@ -153,7 +153,6 @@ trait HasCSources extends JavaModule with PublishModule {
     for (f <- cFiles) yield {
       if (!os.exists(destDir))
         os.makeDir.all(destDir)
-      val path = f.relativeTo(os.pwd).toString
       val output = destDir / s"${f.last.stripSuffix(".c")}.obj"
       val needsUpdate = !os.isFile(output) || os.mtime(output) < os.mtime(f)
       if (needsUpdate) {
@@ -229,7 +228,7 @@ trait HasCSources extends JavaModule with PublishModule {
               |if %errorlevel% neq 0 exit /b %errorlevel%
               |link /DLL "/OUT:$dest" ${libsArgs.mkString(" ")} ${objs.map(f => "\"" + f.path.toString + "\"").mkString(" ")}
               |""".stripMargin
-          val scriptPath = Task.dest / "run-cl.bat"
+          val scriptPath = Task.dest / "run-link.bat"
           os.write.over(scriptPath, script.getBytes, createFolders = true)
           os.proc(scriptPath).call(cwd = Task.dest)
         }
