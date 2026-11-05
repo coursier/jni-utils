@@ -56,16 +56,9 @@ public abstract class NativeApi {
 
                 LoadWindowsLibrary.ensureInitialized();
 
-                NativeApi found = null;
-                Iterator<NativeApi> iterator = ServiceLoader.load(nativeApiClass).iterator();
-                if (iterator.hasNext())
-                    found = iterator.next();
-
-                if (found == null) {
-                    Iterator<LowPriorityNativeApi> lowPriorityIterator = ServiceLoader.load(lowPriorityNativeApiClass).iterator();
-                    if (lowPriorityIterator.hasNext())
-                        found = lowPriorityIterator.next();
-                }
+                NativeApi found = firstService(nativeApiClass);
+                if (found == null)
+                    found = firstService(lowPriorityNativeApiClass);
 
                 if (found == null)
                     throw new RuntimeException("No NativeApi instance available. Could not load a Service for " + nativeApiClass + " or " + lowPriorityNativeApiClass);
@@ -75,6 +68,23 @@ public abstract class NativeApi {
             }
             return instance0;
         }
+    }
+
+    /**
+     * Looks for services via the thread context class loader, then via the class loader of
+     * this class.
+     */
+    private static <T> T firstService(Class<T> clazz) {
+        Iterator<T> iterator = ServiceLoader.load(clazz).iterator();
+        if (iterator.hasNext())
+            return iterator.next();
+        ClassLoader ownCl = NativeApi.class.getClassLoader();
+        if (ownCl != null && ownCl != Thread.currentThread().getContextClassLoader()) {
+            iterator = ServiceLoader.load(clazz, ownCl).iterator();
+            if (iterator.hasNext())
+                return iterator.next();
+        }
+        return null;
     }
 
     /** Forces the implementation returned by {@link #get}, or resets it if passed null. */
