@@ -290,7 +290,8 @@ The [CI workflow](.github/workflows/ci.yml):
 2. puts the DLLs of both architectures in the JARs, and packages everything in
    a local Maven repository archive (`ci.packageLocalM2`),
 3. runs the tests again against that archive, on both architectures,
-4. on pushes to `main` and on tags, publishes the artifacts to Maven Central.
+4. on pushes to `main` and on tags, publishes the artifacts to Maven Central,
+   and to the GitHub Packages Maven repository of this repository.
 
 To embed DLLs built elsewhere (like on the runner of the other architecture)
 rather than building them, set `JNI_UTILS_WINDOWS_X86_64_ARTIFACTS_DIR` and / or
@@ -309,8 +310,10 @@ The version is computed from git tags:
   snapshot (`0.4.1-SNAPSHOT`).
 
 Each push to `main` publishes a snapshot. To cut a release, push a `v*` tag
-(like `v0.4.1`) on a commit of `main`: CI then publishes that version to Maven
-Central.
+(like `v0.4.1`) on a commit of `main`: CI then uploads that version to Sonatype
+Central, as a `coursier-jni-utils-0.4.1` deployment. That deployment isn't
+released automatically: publish it by hand from
+<https://central.sonatype.com/publishing/deployments> once it's validated.
 
 ## License
 
