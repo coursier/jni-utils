@@ -30,6 +30,16 @@ jstring _Java_coursier_jniutils_DefaultNativeApi_Terminal_lastError
   return result;
 }
 
+/* GetStdHandle returns NULL, without setting the last error, when the process has
+   no standard output at all (e.g. a GUI process started without one). */
+static jstring _Java_coursier_jniutils_DefaultNativeApi_Terminal_stdHandleError
+  (JNIEnv *env, HANDLE handle) {
+
+  if (handle == NULL)
+    return (*env)->NewStringUTF(env, "error:GetStdHandle: no standard output handle");
+  return _Java_coursier_jniutils_DefaultNativeApi_Terminal_lastError(env, "GetStdHandle");
+}
+
 jstring _Java_coursier_jniutils_DefaultNativeApi_Terminal_format
   (JNIEnv *env, const char *format, ...) {
 
@@ -57,8 +67,8 @@ JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_terminalSizeNa
   (JNIEnv *env, jclass class) {
 
   HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
-  if (handle == INVALID_HANDLE_VALUE) {
-    return _Java_coursier_jniutils_DefaultNativeApi_Terminal_lastError(env, "GetStdHandle");
+  if (handle == INVALID_HANDLE_VALUE || handle == NULL) {
+    return _Java_coursier_jniutils_DefaultNativeApi_Terminal_stdHandleError(env, handle);
   }
 
   CONSOLE_SCREEN_BUFFER_INFO info;
@@ -75,8 +85,8 @@ JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_enableAnsiOutp
   (JNIEnv *env, jclass class) {
 
   HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
-  if (handle == INVALID_HANDLE_VALUE) {
-    return _Java_coursier_jniutils_DefaultNativeApi_Terminal_lastError(env, "GetStdHandle");
+  if (handle == INVALID_HANDLE_VALUE || handle == NULL) {
+    return _Java_coursier_jniutils_DefaultNativeApi_Terminal_stdHandleError(env, handle);
   }
 
   DWORD mode = 0;
