@@ -4,15 +4,24 @@ import java.io.*;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.nio.channels.Channels;
-import java.nio.channels.ReadableByteChannel;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 import java.util.Locale;
 
 /**
  * Loads the DLL of this library.
  *
  * It's looked for, in that order, directly on the class path, as a resource of the JAR
- * (extracted to a temporary file if needed), and in java.library.path.
+ * (extracted to a stable per-version and per-architecture location if needed), and in
+ * java.library.path.
+ *
+ * DLLs extracted from the JAR go by default to {@code <java.io.tmpdir>/coursier-jni-utils/<arch>/},
+ * and are re-used by later runs. This directory can be changed via the
+ * {@code coursier.jniutils.dll-dir} Java property.
  */
 public final class LoadWindowsLibrary {
 
@@ -57,14 +66,105 @@ public final class LoadWindowsLibrary {
           return null;
         if (url.getProtocol().equals("file"))
             return new File(url.toURI());
-        try (InputStream is = url.openStream(); ReadableByteChannel ic = Channels.newChannel(is)) {
-            File tmpFile = File.createTempFile(dllName(), ".dll");
-            tmpFile.deleteOnExit();
-            try (FileOutputStream os = new FileOutputStream(tmpFile)) {
-                os.getChannel().transferFrom(ic, 0, Long.MAX_VALUE);
-            }
-            return tmpFile;
+
+        byte[] content;
+        try (InputStream is = url.openStream()) {
+            content = readAll(is);
         }
+
+        File dir = extractionDir();
+        if (dir != null) {
+            try {
+                return extract(content, dir);
+            } catch (IOException | SecurityException ex) {
+                // can't write to the stable location, fall back to a temporary file below
+            }
+        }
+
+        File tmpFile = File.createTempFile(dllName(), ".dll");
+        // deleteOnExit can't delete a loaded DLL on Windows, but that's the best we can do here
+        tmpFile.deleteOnExit();
+        try (FileOutputStream os = new FileOutputStream(tmpFile)) {
+            os.write(content);
+        }
+        return tmpFile;
+    }
+
+    /** Where to extract the DLL from the JAR, or null if no such directory can be computed. */
+    static File extractionDir() {
+        String archDir = isArm64() ? "windows64-arm64" : "windows64";
+        String dir = System.getProperty("coursier.jniutils.dll-dir");
+        if (dir != null && !dir.isEmpty())
+            return new File(dir, archDir);
+        String tmpDir = System.getProperty("java.io.tmpdir");
+        if (tmpDir == null || tmpDir.isEmpty())
+            return null;
+        return Paths.get(tmpDir, "coursier-jni-utils", archDir).toFile();
+    }
+
+    /**
+     * Writes content to {@code dir/<dllName>.dll}, unless that file already exists with the same
+     * content. The file is written atomically (written to a temporary file in the same directory,
+     * then moved), so that concurrent JVMs never load a partially written DLL.
+     *
+     * If that file already exists with a different content (which can happen with snapshot
+     * versions), and can't be replaced (because another JVM loaded it), a new uniquely named
+     * file is written in the same directory instead.
+     */
+    static File extract(byte[] content, File dir) throws IOException {
+        File dest = new File(dir, dllName() + ".dll");
+        if (hasContent(dest, content))
+            return dest;
+
+        Files.createDirectories(dir.toPath());
+
+        Path tmp = Files.createTempFile(dir.toPath(), dllName() + "-", ".dll.part");
+        try {
+            Files.write(tmp, content);
+            try {
+                move(tmp, dest.toPath());
+                return dest;
+            } catch (IOException ex) {
+                // Another JVM may have written the same content concurrently, or may have
+                // the existing file loaded, which prevents replacing it on Windows.
+                if (hasContent(dest, content))
+                    return dest;
+                Path unique = Files.createTempFile(dir.toPath(), dllName() + "-", ".dll");
+                move(tmp, unique);
+                File uniqueFile = unique.toFile();
+                uniqueFile.deleteOnExit();
+                return uniqueFile;
+            }
+        } finally {
+            Files.deleteIfExists(tmp);
+        }
+    }
+
+    private static void move(Path from, Path to) throws IOException {
+        try {
+            Files.move(from, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException ex) {
+            Files.move(from, to, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private static boolean hasContent(File f, byte[] content) {
+        if (!f.isFile() || f.length() != content.length)
+            return false;
+        try {
+            return Arrays.equals(Files.readAllBytes(f.toPath()), content);
+        } catch (IOException | SecurityException ex) {
+            return false;
+        }
+    }
+
+    private static byte[] readAll(InputStream is) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        byte[] buf = new byte[16384];
+        int read;
+        while ((read = is.read(buf)) >= 0)
+            baos.write(buf, 0, read);
+        return baos.toByteArray();
     }
 
     /** Assumes the DLL is already loaded, or its native code is otherwise available. */
