@@ -14,6 +14,8 @@ object WindowsKnownFoldersTests extends TestSuite {
     val path = WindowsKnownFolders.knownFolderPath(roamingAppData)
     assert(path != null)
     assert(Files.isDirectory(Paths.get(path)))
+
+    assert(WindowsKnownFolders.knownFolderPath("not-a-guid") == null)
   }
 
   val tests = Tests {
@@ -35,6 +37,16 @@ object WindowsKnownFoldersTests extends TestSuite {
     test("coursierapi") synchronized {
       coursierapi.internal.jniutils.ApiInternalNativeApi.setup()
       check()
+    }
+
+    test("invalidGuid") synchronized {
+      coursier.jniutils.NativeApi.set(null)
+      assert(WindowsKnownFolders.knownFolderPath(null) == null)
+      assert(WindowsKnownFolders.knownFolderPath("not-a-guid") == null)
+      assert(WindowsKnownFolders.knownFolderPath("{3EB685DB-65F9-4CF6-A03A-E3EF65729F3D") == null)
+      // Well-formed, but not a known folder ID: this is SHGetKnownFolderPath failing, not
+      // CLSIDFromString.
+      assert(WindowsKnownFolders.knownFolderPath("{00000000-0000-0000-0000-000000000000}") == null)
     }
   }
 }
