@@ -7,5 +7,5 @@ object Deps {
 }
 
 object Scala {
-  def scala213 = "3.9.0"
+  def version = "3.9.0"
 }
