@@ -9,8 +9,6 @@ public final class ModuleFileName {
      * The path of the executable of the current process, as returned by GetModuleFileName,
      * like C:\...\bin\java.exe (or the native executable, from a GraalVM native image).
      *
-     * Paths longer than MAX_PATH are truncated.
-     *
      * @throws UncheckedIOException if GetModuleFileName fails
      */
     public static String get() {
