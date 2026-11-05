@@ -2,6 +2,7 @@ package coursier.jniutils;
 
 import java.util.Objects;
 
+/** A console size, in characters. */
 public final class TerminalSize {
     private final int width;
     private final int height;
