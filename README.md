@@ -142,6 +142,58 @@ Note that only the charsets included at build time are available in a native
 image. Pass `-H:+AddAllCharsets` to `native-image` if `WindowsCodePages.charsetFor`
 or `WindowsCodePages.oemCharset` need to resolve arbitrary code pages.
 
+## How it works
+
+### Modules
+
+The `windows-jni-utils` module is the only one most users need. The other
+modules are meant for coursier components that shade (relocate)
+`windows-jni-utils`:
+
+| Module                         | `NativeApi` implementation                              | Used by |
+|--------------------------------|---------------------------------------------------------|---------|
+| `windows-jni-utils`            | `coursier.jniutils.DefaultNativeApi`                    | everyone |
+| `windows-jni-utils-bootstrap`  | `coursier.bootstrap.launcher.jniutils.BootstrapNativeApi` | coursier bootstrap launchers |
+| `windows-jni-utils-lmcoursier` | `lmcoursier.internal.jniutils.LmNativeApi`              | [sbt-coursier / lm-coursier](https://github.com/coursier/sbt-coursier) |
+| `windows-jni-utils-coursierapi`| `coursierapi.internal.jniutils.ApiInternalNativeApi`    | [coursier interface](https://github.com/coursier/interface) |
+
+JNI binds `native` methods to C functions whose names are derived from the
+fully qualified name of the Java class declaring them. When a project shades
+`windows-jni-utils` under its own package, the `native` methods of
+`DefaultNativeApi` end up in a class with a different name, and can't be bound
+anymore. So each of those modules provides a `NativeApi` implementation, in a
+package that the corresponding project doesn't relocate, whose `native`
+methods are implemented by the same DLL as the default ones.
+
+`NativeApi.get()` picks the implementation to use:
+1. the one passed to `NativeApi.set(…)`, if any (the `setup()` method of the
+   alternative implementations above calls it),
+2. otherwise, the first `NativeApi` service found with `java.util.ServiceLoader`.
+   All the implementations above are registered as such, so if several of
+   them are on the class path, the first one there wins - call `setup()` (or
+   `NativeApi.set`) to pick one explicitly,
+3. otherwise, the first `LowPriorityNativeApi` service, if any.
+
+### Loading the DLL
+
+The name of the DLL includes the version of the library, like
+`csjniutils-0.4.0.dll`, so that several versions of the library can be loaded
+in the same JVM. Upon first use, `LoadWindowsLibrary.ensureInitialized()`
+loads it from the first of these locations that has it:
+1. a file with that name, directly on the class path,
+2. the `META-INF/native/windows64` (or `windows64-arm64` on ARM64) resource
+   embedded in the JAR. If the resource isn't a file, it's extracted to a
+   temporary file first, deleted when the JVM exits,
+3. `java.library.path`, via `System.loadLibrary`.
+
+Applications that already loaded the DLL by other means, or that link the
+native code statically (in a GraalVM native image, say), can call
+`LoadWindowsLibrary.assumeInitialized()` to skip that step.
+
+Besides the JARs, the DLL and a static library (`.lib`) with the same native
+code are published as separate artifacts of `windows-jni-utils`, with the
+`x86_64-pc-win32` and `arm64-pc-win32` classifiers.
+
 ## License
 
 *coursier-jni-utils* is licensed under the Apache License, version 2.0. See
