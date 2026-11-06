@@ -168,11 +168,11 @@ methods are implemented by the same DLL as the default ones.
 `NativeApi.get()` picks the implementation to use:
 1. the one passed to `NativeApi.set(…)`, if any (the `setup()` method of the
    alternative implementations above calls it),
-2. otherwise, the first `NativeApi` service found with `java.util.ServiceLoader`.
-   All the implementations above are registered as such, so if several of
-   them are on the class path, the first one there wins - call `setup()` (or
-   `NativeApi.set`) to pick one explicitly,
-3. otherwise, the first `LowPriorityNativeApi` service, if any.
+2. otherwise, the first of `BootstrapNativeApi`, `LmNativeApi`, and
+   `ApiInternalNativeApi` that can be found in the class loader of `NativeApi`
+   (looked up by name, so that these are picked automatically by the projects
+   shading `windows-jni-utils` along with one of them),
+3. otherwise, `DefaultNativeApi`.
 
 ### Loading the DLL
 

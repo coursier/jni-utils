@@ -1,6 +1,6 @@
 package coursier.jniutils;
 
-public final class DefaultNativeApi extends LowPriorityNativeApi {
+public final class DefaultNativeApi extends NativeApi {
 
     static native String terminalSizeNative();
 

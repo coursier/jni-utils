@@ -91,8 +91,8 @@ object NativeApiLinkageTests extends TestSuite {
     finally NativeApi.set(null)
 
   val tests = Tests {
-    // Not via NativeApi.get(), as the ServiceLoader may pick any of the implementations on
-    // the class path
+    // Not via NativeApi.get(), as it picks one of the alternative implementations, which are
+    // on the class path of the tests
     test("default") synchronized {
       LoadWindowsLibrary.ensureInitialized()
       checkAll(new DefaultNativeApi)

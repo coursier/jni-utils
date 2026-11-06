@@ -1,10 +1,5 @@
 package coursier.jniutils;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.Iterator;
-import java.util.ServiceLoader;
-
 /**
  * The native methods of this library.
  *
@@ -36,10 +31,23 @@ public abstract class NativeApi {
     private static final Object lock = new Object();
 
     /**
+     * The implementations provided by the modules meant for the projects shading this library,
+     * picked by {@link #get} over {@link DefaultNativeApi} if they're around. When this library
+     * is shaded, the native methods of the relocated {@link DefaultNativeApi} can't be bound
+     * anymore, but those of these implementations can (their packages aren't relocated).
+     */
+    private static final String[] alternativeImplementations = {
+        "coursier.bootstrap.launcher.jniutils.BootstrapNativeApi",
+        "lmcoursier.internal.jniutils.LmNativeApi",
+        "coursierapi.internal.jniutils.ApiInternalNativeApi"
+    };
+
+    /**
      * The implementation to use.
      *
-     * That's the one passed to {@link #set}, if any, else the first {@code NativeApi} service
-     * found by {@link ServiceLoader}, else the first {@link LowPriorityNativeApi} one.
+     * That's the one passed to {@link #set}, if any, else the first of the alternative
+     * implementations (bootstrap, lmcoursier, coursierapi) that can be found in the class
+     * loader of this class, else {@link DefaultNativeApi}.
      *
      * This loads the native library, if it's not loaded already.
      */
@@ -51,20 +59,16 @@ public abstract class NativeApi {
         synchronized (lock) {
             instance0 = instance;
             if (instance0 == null) {
-                Class<NativeApi> nativeApiClass = NativeApi.class;
-                Class<LowPriorityNativeApi> lowPriorityNativeApiClass = LowPriorityNativeApi.class;
-
-                // The implementations load the DLL themselves, each under a name of its own,
-                // when they're initialized. So we look for them before loading the DLL.
-                NativeApi found = firstService(nativeApiClass);
+                NativeApi found = null;
+                for (String className : alternativeImplementations) {
+                    found = instantiate(className);
+                    if (found != null)
+                        break;
+                }
+                // Instantiating an implementation loads the DLL, under a name specific to
+                // that implementation (see LoadWindowsLibrary.ensureInitialized(String))
                 if (found == null)
-                    found = firstService(lowPriorityNativeApiClass);
-
-                if (found == null)
-                    throw new RuntimeException("No NativeApi instance available. Could not load a Service for " + nativeApiClass + " or " + lowPriorityNativeApiClass);
-
-                // In case the implementation doesn't load the DLL itself (no-op if it did)
-                LoadWindowsLibrary.ensureInitialized();
+                    found = new DefaultNativeApi();
 
                 instance = found;
                 instance0 = found;
@@ -74,20 +78,23 @@ public abstract class NativeApi {
     }
 
     /**
-     * Looks for services via the thread context class loader, then via the class loader of
-     * this class.
+     * Instantiates the {@code NativeApi} implementation named className, if it can be found in
+     * the class loader of this class, or returns null.
      */
-    private static <T> T firstService(Class<T> clazz) {
-        Iterator<T> iterator = ServiceLoader.load(clazz).iterator();
-        if (iterator.hasNext())
-            return iterator.next();
-        ClassLoader ownCl = NativeApi.class.getClassLoader();
-        if (ownCl != null && ownCl != Thread.currentThread().getContextClassLoader()) {
-            iterator = ServiceLoader.load(clazz, ownCl).iterator();
-            if (iterator.hasNext())
-                return iterator.next();
+    private static NativeApi instantiate(String className) {
+        Class<?> clazz;
+        try {
+            clazz = Class.forName(className, false, NativeApi.class.getClassLoader());
+        } catch (ClassNotFoundException | LinkageError ex) {
+            return null;
         }
-        return null;
+        if (!NativeApi.class.isAssignableFrom(clazz))
+            return null;
+        try {
+            return (NativeApi) clazz.getConstructor().newInstance();
+        } catch (ReflectiveOperationException ex) {
+            throw new RuntimeException("Error instantiating " + className, ex);
+        }
     }
 
     /** Forces the implementation returned by {@link #get}, or resets it if passed null. */
