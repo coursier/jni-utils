@@ -31,23 +31,15 @@ public abstract class NativeApi {
     private static final Object lock = new Object();
 
     /**
-     * The implementations provided by the modules meant for the projects shading this library,
-     * picked by {@link #get} over {@link DefaultNativeApi} if they're around. When this library
-     * is shaded, the native methods of the relocated {@link DefaultNativeApi} can't be bound
-     * anymore, but those of these implementations can (their packages aren't relocated).
-     */
-    private static final String[] alternativeImplementations = {
-        "coursier.bootstrap.launcher.jniutils.BootstrapNativeApi",
-        "lmcoursier.internal.jniutils.LmNativeApi",
-        "coursierapi.internal.jniutils.ApiInternalNativeApi"
-    };
-
-    /**
      * The implementation to use.
      *
-     * That's the one passed to {@link #set}, if any, else the first of the alternative
-     * implementations (bootstrap, lmcoursier, coursierapi) that can be found in the class
-     * loader of this class, else {@link DefaultNativeApi}.
+     * That's the one passed to {@link #set}, if any (the {@code setup()} method of the
+     * alternative implementations, like {@code BootstrapNativeApi}, calls it), else
+     * {@link DefaultNativeApi}.
+     *
+     * Projects shading this library need to call the {@code setup()} method of their own
+     * implementation beforehand, as the native methods of the relocated
+     * {@link DefaultNativeApi} can't be bound.
      *
      * This loads the native library, if it's not loaded already.
      */
@@ -59,41 +51,11 @@ public abstract class NativeApi {
         synchronized (lock) {
             instance0 = instance;
             if (instance0 == null) {
-                NativeApi found = null;
-                for (String className : alternativeImplementations) {
-                    found = instantiate(className);
-                    if (found != null)
-                        break;
-                }
-                // Instantiating an implementation loads the DLL, under a name specific to
-                // that implementation (see LoadWindowsLibrary.ensureInitialized(String))
-                if (found == null)
-                    found = new DefaultNativeApi();
-
-                instance = found;
-                instance0 = found;
+                // Initializing DefaultNativeApi loads the DLL
+                instance0 = new DefaultNativeApi();
+                instance = instance0;
             }
             return instance0;
-        }
-    }
-
-    /**
-     * Instantiates the {@code NativeApi} implementation named className, if it can be found in
-     * the class loader of this class, or returns null.
-     */
-    private static NativeApi instantiate(String className) {
-        Class<?> clazz;
-        try {
-            clazz = Class.forName(className, false, NativeApi.class.getClassLoader());
-        } catch (ClassNotFoundException | LinkageError ex) {
-            return null;
-        }
-        if (!NativeApi.class.isAssignableFrom(clazz))
-            return null;
-        try {
-            return (NativeApi) clazz.getConstructor().newInstance();
-        } catch (ReflectiveOperationException ex) {
-            throw new RuntimeException("Error instantiating " + className, ex);
         }
     }
 

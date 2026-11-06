@@ -1,6 +1,6 @@
 package coursier.jniutils.tests
 
-import coursier.jniutils.{DefaultNativeApi, LoadWindowsLibrary, NativeApi}
+import coursier.jniutils.{DefaultNativeApi, NativeApi}
 import utest._
 
 import java.lang.reflect.{InvocationTargetException, Method, Modifier}
@@ -91,11 +91,9 @@ object NativeApiLinkageTests extends TestSuite {
     finally NativeApi.set(null)
 
   val tests = Tests {
-    // Not via NativeApi.get(), as it picks one of the alternative implementations, which are
-    // on the class path of the tests
+    // With no implementation set, NativeApi.get() returns DefaultNativeApi
     test("default") synchronized {
-      LoadWindowsLibrary.ensureInitialized()
-      checkAll(new DefaultNativeApi)
+      withSetup(NativeApi.set(null), classOf[DefaultNativeApi])
     }
 
     test("bootstrap") synchronized {

@@ -165,14 +165,12 @@ anymore. So each of those modules provides a `NativeApi` implementation, in a
 package that the corresponding project doesn't relocate, whose `native`
 methods are implemented by the same DLL as the default ones.
 
-`NativeApi.get()` picks the implementation to use:
-1. the one passed to `NativeApi.set(…)`, if any (the `setup()` method of the
-   alternative implementations above calls it),
-2. otherwise, the first of `BootstrapNativeApi`, `LmNativeApi`, and
-   `ApiInternalNativeApi` that can be found in the class loader of `NativeApi`
-   (looked up by name, so that these are picked automatically by the projects
-   shading `windows-jni-utils` along with one of them),
-3. otherwise, `DefaultNativeApi`.
+`NativeApi.get()` returns the implementation passed to `NativeApi.set(…)`, if
+any, and `DefaultNativeApi` otherwise. Projects shading `windows-jni-utils`
+need to call the `setup()` method of their implementation (like
+`BootstrapNativeApi.setup()`), which calls `NativeApi.set(…)`, before using
+the library: once relocated, the `native` methods of `DefaultNativeApi` can't
+be bound.
 
 ### Loading the DLL
 
