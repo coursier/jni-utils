@@ -35,17 +35,17 @@ object `windows-jni-utils` extends WindowsUtils with HasCSources with JniUtilsPu
   }
 }
 
-object `windows-jni-utils-bootstrap` extends WindowsUtils with JniUtilsPublishModule with GeneratedNativeApi {
+object `windows-jni-utils-bootstrap` extends WindowsUtils with JniUtilsPublishModule with CheckedInNativeApi {
   def moduleDeps = Seq(`windows-jni-utils`)
   def nativeApiImpl = NativeApiGen.bootstrap
 }
 
-object `windows-jni-utils-lmcoursier` extends WindowsUtils with JniUtilsPublishModule with GeneratedNativeApi {
+object `windows-jni-utils-lmcoursier` extends WindowsUtils with JniUtilsPublishModule with CheckedInNativeApi {
   def moduleDeps = Seq(`windows-jni-utils`)
   def nativeApiImpl = NativeApiGen.lmcoursier
 }
 
-object `windows-jni-utils-coursierapi` extends WindowsUtils with JniUtilsPublishModule with GeneratedNativeApi {
+object `windows-jni-utils-coursierapi` extends WindowsUtils with JniUtilsPublishModule with CheckedInNativeApi {
   def moduleDeps = Seq(`windows-jni-utils`)
   def nativeApiImpl = NativeApiGen.coursierapi
 }

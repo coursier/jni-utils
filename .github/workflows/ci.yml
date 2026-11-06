@@ -20,6 +20,8 @@ jobs:
       env:
         MILL_CHECKS_ORPHAN_SOURCES_IGNORE: >-
           mill-build
+    - name: Check the checked in NativeApi implementations are up-to-date
+      run: ./mill -i __.checkNativeApi
 
   test:
     name: Test (${{ matrix.runner }})

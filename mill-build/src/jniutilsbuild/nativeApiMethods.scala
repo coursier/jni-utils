@@ -11,6 +11,8 @@ object NativeApiMethods {
    * - add an abstract method to `NativeApi`,
    * - add it here too, so that the `NativeApi` implementations, the JNI headers, and the C
    *   functions forwarding the calls of the relocated implementations, get generated,
+   * - run `./mill __.generateNativeApi`, to update the implementations checked in under the
+   *   `src/main/java` directories of the modules other than `windows-jni-utils`,
    * - implement `Java_coursier_jniutils_DefaultNativeApi_<name>Native` in
    *   `windows-jni-utils/src/main/c`, including the generated `coursier_jniutils_DefaultNativeApi.h`.
    */

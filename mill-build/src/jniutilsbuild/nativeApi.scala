@@ -1,6 +1,7 @@
 package jniutilsbuild
 
 import mill.*, scalalib.*
+import mill.api.BuildCtx
 
 /**
  * Generates the boilerplate around the native methods of the library, from the single list
@@ -10,6 +11,8 @@ import mill.*, scalalib.*
  *   delegating to them,
  * - the JNI headers of these classes,
  * - the C functions binding the native methods of the copies to the ones of `DefaultNativeApi`.
+ *
+ * The copies are checked in (see [[CheckedInNativeApi]]), the rest is generated under `out/`.
  *
  * The abstract methods of `NativeApi` itself are hand-written: as the generated methods are
  * marked with `@Override`, and the generated classes are concrete, javac fails if the two
@@ -181,5 +184,43 @@ trait GeneratedNativeApi extends JavaModule {
   def nativeApiImpl: NativeApiGen.Impl
   def generatedSources = Task {
     super.generatedSources() ++ Seq(PathRef(NativeApiGen.writeJava(Task.dest, nativeApiImpl)))
+  }
+}
+
+/**
+ * A module whose `NativeApi` implementation is generated, but checked in under `src/main/java`,
+ * so that it can be compiled from the checked out sources alone.
+ *
+ * `generateNativeApi` (re-)writes it there, and `checkNativeApi` fails if it's not up-to-date.
+ */
+trait CheckedInNativeApi extends JavaModule {
+  def nativeApiImpl: NativeApiGen.Impl
+
+  private def nativeApiSubPath: os.SubPath =
+    os.sub / "src/main/java" / os.SubPath(nativeApiImpl.pkg.replace('.', '/')) / s"${nativeApiImpl.className}.java"
+
+  def nativeApiSource = Task.Source(nativeApiSubPath)
+
+  /** Writes the `NativeApi` implementation of this module under `src/main/java` */
+  def generateNativeApi() = Task.Command {
+    val dir = moduleDir / "src/main/java"
+    val f = BuildCtx.withFilesystemCheckerDisabled {
+      NativeApiGen.writeJava(dir, nativeApiImpl)
+    }
+    System.err.println(s"Wrote ${f.relativeTo(BuildCtx.workspaceRoot)}")
+    PathRef(f)
+  }
+
+  /** Fails if the `NativeApi` implementation under `src/main/java` isn't the one the build generates */
+  def checkNativeApi() = Task.Command {
+    val f = nativeApiSource().path
+    val expected = NativeApiGen.javaSource(nativeApiImpl)
+    val upToDate = os.isFile(f) && os.read(f) == expected
+    if (!upToDate) {
+      val what = if (os.exists(f)) "is not up-to-date" else "doesn't exist"
+      Task.fail(
+        s"${f.relativeTo(BuildCtx.workspaceRoot)} $what, run './mill __.generateNativeApi' to update it"
+      )
+    }
   }
 }

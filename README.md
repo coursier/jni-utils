@@ -273,7 +273,7 @@ The resulting DLL is added to the resources of `windows-jni-utils`, as
 
 The methods of `NativeApi` are listed in
 `mill-build/src/jniutilsbuild/nativeApiMethods.scala`. From that list, the
-build generates (under `out/`, nothing generated is checked in):
+build generates:
 - the `NativeApi` implementations (`DefaultNativeApi`, `BootstrapNativeApi`,
   `LmNativeApi`, `ApiInternalNativeApi`), with their `native` methods and the
   methods delegating to them,
@@ -282,8 +282,21 @@ build generates (under `out/`, nothing generated is checked in):
 - the C functions implementing the `native` methods of the relocated
   implementations, which call the ones of `DefaultNativeApi`.
 
+Everything is generated under `out/`, except the implementations of the
+`windows-jni-utils-bootstrap`, `windows-jni-utils-lmcoursier` and
+`windows-jni-utils-coursierapi` modules, which are checked in under their
+`src/main/java` directory, so that these modules can be compiled from the
+checked out sources alone. Update them with
+```text
+$ ./mill __.generateNativeApi
+```
+and check that they're up-to-date (as CI does) with
+```text
+$ ./mill __.checkNativeApi
+```
+
 To add a native function, add an abstract method to `NativeApi`, add it to
-`nativeApiMethods.scala` too, and implement
+`nativeApiMethods.scala` too, run `./mill __.generateNativeApi`, and implement
 `Java_coursier_jniutils_DefaultNativeApi_<method name>Native` in a `.c` file
 under `windows-jni-utils/src/main/c` (including
 `coursier_jniutils_DefaultNativeApi.h`). If `NativeApi` and the list don't
