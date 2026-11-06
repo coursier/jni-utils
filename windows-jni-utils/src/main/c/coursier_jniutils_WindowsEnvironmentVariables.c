@@ -88,6 +88,8 @@ static DWORD userEnvironmentVariableType(const WCHAR *value, jsize len) {
 JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_SetUserEnvironmentVariableNative
   (JNIEnv *env, jclass class, jstring key, jstring value) {
 
+  UNREFERENCED_PARAMETER(class);
+
   jsize valueLen = 0;
   WCHAR *keyStr = toWide(env, key, NULL);
   if (keyStr == NULL)
@@ -121,6 +123,8 @@ JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_SetUserEnviron
 
 JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_GetUserEnvironmentVariableNative
   (JNIEnv *env, jclass class, jstring key) {
+
+  UNREFERENCED_PARAMETER(class);
 
   WCHAR *keyStr = toWide(env, key, NULL);
   if (keyStr == NULL)
@@ -197,6 +201,8 @@ JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_GetUserEnviron
 
 JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_DeleteUserEnvironmentVariableNative
   (JNIEnv *env, jclass class, jstring key) {
+
+  UNREFERENCED_PARAMETER(class);
 
   WCHAR *keyStr = toWide(env, key, NULL);
   if (keyStr == NULL)

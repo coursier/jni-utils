@@ -14,6 +14,8 @@ jstring _Java_coursier_jniutils_DefaultNativeApi_Terminal_lastError(JNIEnv *, co
 JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_GetModuleFileNameNative
   (JNIEnv *env, jclass cls) {
 
+  UNREFERENCED_PARAMETER(cls);
+
   DWORD size = MAX_PATH;
   DWORD len;
   WCHAR *buf;

@@ -66,6 +66,8 @@ jstring _Java_coursier_jniutils_DefaultNativeApi_Terminal_format
 JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_terminalSizeNative
   (JNIEnv *env, jclass class) {
 
+  UNREFERENCED_PARAMETER(class);
+
   HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
   if (handle == INVALID_HANDLE_VALUE || handle == NULL) {
     return _Java_coursier_jniutils_DefaultNativeApi_Terminal_stdHandleError(env, handle);
@@ -87,6 +89,8 @@ JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_terminalSizeNa
 
 JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_enableAnsiOutputNative
   (JNIEnv *env, jclass class) {
+
+  UNREFERENCED_PARAMETER(class);
 
   HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
   if (handle == INVALID_HANDLE_VALUE || handle == NULL) {
