@@ -54,6 +54,25 @@ static jstring errorMessage(JNIEnv *env, LSTATUS status) {
   return (*env)->NewString(env, buf, len);
 }
 
+/* Tells running applications, Explorer first, that the user environment changed, like the
+   System Properties environment variable dialog does. Explorer then re-reads it from the
+   registry, so that the processes it starts afterwards, like new terminals, see the change.
+   SMTO_ABORTIFHUNG and the timeout keep hung top-level windows from blocking us; the
+   timeout applies to each window. The registry was already updated when we get here, so
+   failures and timeouts are ignored: at worst, the change is only picked up at the next
+   logon, like before. */
+static void broadcastEnvironmentChange(void) {
+  SendMessageTimeoutW(
+    HWND_BROADCAST,
+    WM_SETTINGCHANGE,
+    0,
+    (LPARAM) ENVIRONMENT_KEY,
+    SMTO_ABORTIFHUNG,
+    1000,
+    NULL
+  );
+}
+
 /* Windows only expands references to other environment variables, like "%JAVA_HOME%\bin",
    in values stored as REG_EXPAND_SZ. Like the System Properties environment variable dialog,
    we store values containing a '%' that way, and the other ones as plain REG_SZ. */
@@ -96,6 +115,7 @@ JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_SetUserEnviron
 
   if (status != ERROR_SUCCESS)
     return errorMessage(env, status);
+  broadcastEnvironmentChange();
   return emptyString(env);
 }
 
@@ -189,7 +209,11 @@ JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_DeleteUserEnvi
   );
   free(keyStr);
 
-  if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND)
+  /* Nothing changed if the variable wasn't there, so there's nothing to broadcast then. */
+  if (status == ERROR_FILE_NOT_FOUND)
+    return emptyString(env);
+  if (status != ERROR_SUCCESS)
     return errorMessage(env, status);
+  broadcastEnvironmentChange();
   return emptyString(env);
 }

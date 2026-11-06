@@ -15,7 +15,7 @@ import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 
 object `windows-jni-utils` extends MavenModule with JniUtilsPublishVersion with HasCSources with JniUtilsPublishModule with WithDllNameJava {
-  def linkingLibs = Seq("ole32", "shell32", "advapi32", "kernel32")
+  def linkingLibs = Seq("ole32", "shell32", "advapi32", "kernel32", "user32")
 
   def compile = Task {
     headers.`windows-jni-utils`.compile()

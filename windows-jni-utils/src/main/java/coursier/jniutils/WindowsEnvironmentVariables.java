@@ -7,7 +7,15 @@ import java.io.IOException;
  * HKEY_CURRENT_USER\Environment.
  *
  * These are not the environment variables of the current process: changes made here don't
- * affect it, nor already running processes. No WM_SETTINGCHANGE message is broadcast either.
+ * affect it, nor already running processes.
+ *
+ * After each successful {@link #set} and each {@link #delete} that actually removed a variable,
+ * a WM_SETTINGCHANGE message is broadcast to all top-level windows, like the System Properties
+ * environment variable dialog does. Explorer then reloads the user environment, so that the
+ * processes it starts afterwards (new terminals, say) see the change, without the user having
+ * to log off. Windows that don't process that message in time (one second each) are skipped.
+ * The outcome of that broadcast is ignored: the registry was updated by then, so a failed or
+ * timed out broadcast doesn't make these methods throw.
  */
 public final class WindowsEnvironmentVariables {
 
