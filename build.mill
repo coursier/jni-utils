@@ -35,17 +35,20 @@ object `windows-jni-utils` extends WindowsUtils with HasCSources with JniUtilsPu
   }
 }
 
-object `windows-jni-utils-bootstrap` extends WindowsUtils with JniUtilsPublishModule with CheckedInNativeApi {
+// The modules below aren't published. They're only compiled and tested here, their
+// (checked in) sources being meant to be used directly by the projects needing them.
+
+object `windows-jni-utils-bootstrap` extends WindowsUtils with CheckedInNativeApi {
   def moduleDeps = Seq(`windows-jni-utils`)
   def nativeApiImpl = NativeApiGen.bootstrap
 }
 
-object `windows-jni-utils-lmcoursier` extends WindowsUtils with JniUtilsPublishModule with CheckedInNativeApi {
+object `windows-jni-utils-lmcoursier` extends WindowsUtils with CheckedInNativeApi {
   def moduleDeps = Seq(`windows-jni-utils`)
   def nativeApiImpl = NativeApiGen.lmcoursier
 }
 
-object `windows-jni-utils-coursierapi` extends WindowsUtils with JniUtilsPublishModule with CheckedInNativeApi {
+object `windows-jni-utils-coursierapi` extends WindowsUtils with CheckedInNativeApi {
   def moduleDeps = Seq(`windows-jni-utils`)
   def nativeApiImpl = NativeApiGen.coursierapi
 }
@@ -96,11 +99,23 @@ object `windows-jni-utils-tests` extends ScalaModule {
         Task(Seq(Deps.utest))
       else
         Task {
-          Seq(Deps.utest) ++ Seq(
-            mvn"${`windows-jni-utils-bootstrap`.pomSettings().organization}:${`windows-jni-utils-bootstrap`.artifactId()}:${`windows-jni-utils-bootstrap`.publishVersion()}",
-            mvn"${`windows-jni-utils-lmcoursier`.pomSettings().organization}:${`windows-jni-utils-lmcoursier`.artifactId()}:${`windows-jni-utils-lmcoursier`.publishVersion()}",
-            mvn"${`windows-jni-utils-coursierapi`.pomSettings().organization}:${`windows-jni-utils-coursierapi`.artifactId()}:${`windows-jni-utils-coursierapi`.publishVersion()}"
+          Seq(
+            Deps.utest,
+            mvn"${`windows-jni-utils`.pomSettings().organization}:${`windows-jni-utils`.artifactId()}:${`windows-jni-utils`.publishVersion()}"
           )
+        }
+    // The helper modules aren't published: when testing the published windows-jni-utils,
+    // add their classes and resources, compiled from the sources here, to the class path
+    def unmanagedClasspath =
+      if (repoArchive.isEmpty) super.unmanagedClasspath
+      else
+        Task {
+          val helpersClasspath =
+            `windows-jni-utils-bootstrap`.localClasspath() ++
+              `windows-jni-utils-lmcoursier`.localClasspath() ++
+              `windows-jni-utils-coursierapi`.localClasspath()
+          // Mill doesn't accept non-existing unmanaged class path entries
+          super.unmanagedClasspath() ++ helpersClasspath.filter(ref => os.exists(ref.path))
         }
     def testFramework = "utest.runner.Framework"
   }
@@ -130,9 +145,6 @@ object ci extends Module {
       .getOrElse(BuildCtx.workspaceRoot / "working-dir")
     Task.Command {
       `windows-jni-utils`.publishM2Local(m2RepoPath = repo.toString)()
-      `windows-jni-utils-bootstrap`.publishM2Local(m2RepoPath = repo.toString)()
-      `windows-jni-utils-lmcoursier`.publishM2Local(m2RepoPath = repo.toString)()
-      `windows-jni-utils-coursierapi`.publishM2Local(m2RepoPath = repo.toString)()
       val zip = os.Path(output, BuildCtx.workspaceRoot)
       PathRef(os.zip(zip, Seq(repo)))
     }
@@ -141,10 +153,7 @@ object ci extends Module {
   // The modules whose artifacts are packaged by `packageLocalM2` and thus
   // present in the Maven repository archive consumed below.
   private def publishedModules: Seq[PublishModule] = Seq(
-    `windows-jni-utils`,
-    `windows-jni-utils-bootstrap`,
-    `windows-jni-utils-lmcoursier`,
-    `windows-jni-utils-coursierapi`
+    `windows-jni-utils`
   )
 
   // Reads the files already published in the Maven repository layout for the
