@@ -8,79 +8,6 @@ import mill.util.Jvm
 import java.security.MessageDigest
 import java.util.Locale
 
-trait GenerateHeaders extends JavaModule {
-  def cDirectory = Task.Source("src/main/c")
-  override def javacOptions = Task{
-    val dest = cDirectory().path
-    Seq("-h", dest.toNIO.toAbsolutePath.toString)
-  }
-  def compile = Task {
-    val res = super.compile()
-    val dir = cDirectory().path
-    val headerFiles = Seq(dir).flatMap { dir =>
-      if (os.isDir(dir))
-        os.walk(dir)
-          .filter(p => os.isFile(p) && p.last.endsWith(".h"))
-      else
-        Nil
-    }
-    // javac writes the headers straight in the source tree, and uses the line endings
-    // of the current OS - normalize those to CRLF, like the checked in headers.
-    // The filesystem checker needs to be disabled, as we write outside of Task.dest.
-    BuildCtx.withFilesystemCheckerDisabled {
-      for (f <- headerFiles) {
-        val content = os.read.bytes(f)
-        for (updatedContent <- toCrLfOpt(content))
-          os.write.over(f, updatedContent)
-      }
-    }
-    res
-  }
-}
-
-def toCrLfOpt(content: Array[Byte]): Option[Array[Byte]] = {
-  val cr = '\r'.toByte
-  val lf = '\n'.toByte
-  val indices = content
-    .iterator
-    .zipWithIndex
-    .collect {
-      case (`lf`, idx) if idx > 0 && content(idx - 1) != cr => idx
-    }
-    .toVector
-  if (indices.isEmpty)
-    None
-  else {
-    val updatedContent = Array.ofDim[Byte](content.length + indices.length)
-    var i = 0 // content index
-    var j = 0 // updatedContent index
-    var n = 0 // indices index
-    while (n < indices.length) {
-      val idx = indices(n)
-
-      System.arraycopy(content, i, updatedContent, j, idx - i)
-      j += idx - i
-      i = idx
-
-      updatedContent(j) = cr
-      updatedContent(j + 1) = lf
-      i += 1
-      j += 2
-
-      n += 1
-    }
-
-    val idx = content.length
-    System.arraycopy(content, i, updatedContent, j, content.length - i)
-    j += idx - i
-    i = idx
-
-    assert(i == content.length)
-    assert(j == updatedContent.length)
-    Some(updatedContent)
-  }
-}
-
 private def isArm64: Boolean =
   sys.props.get("os.arch").map(_.toLowerCase(Locale.ROOT)).exists {
     case "aarch64" | "arm64" => true
@@ -146,6 +73,8 @@ trait HasCSources extends JavaModule with PublishModule {
   def linkingLibs = Task(Seq.empty[String])
 
   def cSources = Task.Sources("src/main/c")
+  /** Directories with generated C sources or headers, compiled along with the ones of cSources */
+  def generatedCSources = Task(Seq.empty[PathRef])
 
   // /MT (static CRT, cl's default) is passed explicitly, so that the DLL doesn't depend
   // on a vcruntime DLL. /WX makes warnings fail the build.
@@ -154,12 +83,13 @@ trait HasCSources extends JavaModule with PublishModule {
   def cCompile = Task(persistent = true) {
     val destDir = Task.dest / "obj"
     val stampsFile = Task.dest / "stamps.txt"
-    val dirs = cSources().map(_.path).filter(os.isDir(_))
+    val dirs = (cSources() ++ generatedCSources()).map(_.path).filter(os.isDir(_))
     val allFiles = dirs.flatMap(dir => os.walk(dir).filter(os.isFile(_)))
     val cFiles = allFiles.filter(_.last.endsWith(".c"))
     val headerFiles = allFiles.filter(_.last.endsWith(".h"))
     val javaHome0 = os.Path(windowsJavaHome())
-    val includeArgs = Seq(javaHome0 / "include", javaHome0 / "include/win32")
+    // The C source directories are added too, so that sources can include headers of generated directories
+    val includeArgs = (Seq(javaHome0 / "include", javaHome0 / "include/win32") ++ dirs)
       .map(dir => s"/I $q$dir$q")
     val options = cOptions()
 
