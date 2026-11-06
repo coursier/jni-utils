@@ -123,13 +123,19 @@ From a GraalVM native image, this is the path of the native executable.
 ```java
 int oem = WindowsCodePages.oem();                  // like 437 or 850
 Charset oemCharset = WindowsCodePages.oemCharset(); // like IBM437
+int ansi = WindowsCodePages.ansi();                // like 1252
+Charset ansiCharset = WindowsCodePages.ansiCharset(); // like windows-1252
+int console = WindowsCodePages.consoleOutput();    // like 437, or 65001 after "chcp 65001"
+Charset consoleCharset = WindowsCodePages.consoleOutputCharset();
 Charset charset = WindowsCodePages.charsetFor(1252); // windows-1252
 ```
 
 `oem()` returns the OEM code page of the system, which is the one consoles and
 `cmd.exe` use by default, and which usually differs from the ANSI code page
-that Java uses for `sun.jnu.encoding`. `charsetFor` and `oemCharset` return
-`null` if the JVM has no charset for a code page. `charsetFor` doesn't rely on
+(`ansi()`) that Java uses for `sun.jnu.encoding`. `consoleOutput()` returns the
+current output code page of the console of the process (0 if it has none),
+which `chcp` changes. `charsetFor` and the `…Charset` methods return `null` if
+the JVM has no charset for a code page. `charsetFor` doesn't rely on
 native code, and can be called on any OS.
 
 ### GraalVM native image
@@ -140,7 +146,7 @@ without extra configuration.
 
 Note that only the charsets included at build time are available in a native
 image. Pass `-H:+AddAllCharsets` to `native-image` if `WindowsCodePages.charsetFor`
-or `WindowsCodePages.oemCharset` need to resolve arbitrary code pages.
+or the `WindowsCodePages.…Charset` methods need to resolve arbitrary code pages.
 
 ## How it works
 

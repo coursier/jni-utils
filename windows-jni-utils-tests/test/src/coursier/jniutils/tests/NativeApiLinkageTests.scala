@@ -25,7 +25,9 @@ object NativeApiLinkageTests extends TestSuite {
     "DeleteUserEnvironmentVariable(String)"             -> (ctx => Seq(ctx.envKey)),
     "GetKnownFolderPath(String)"                        -> (_ => Seq("{3EB685DB-65F9-4CF6-A03A-E3EF65729F3D}")),
     "GetModuleFileName()"                               -> (_ => Nil),
-    "GetOEMCodePage()"                                  -> (_ => Nil)
+    "GetOEMCodePage()"                                  -> (_ => Nil),
+    "GetACP()"                                          -> (_ => Nil),
+    "GetConsoleOutputCP()"                              -> (_ => Nil)
   )
 
   private def signature(m: Method): String =

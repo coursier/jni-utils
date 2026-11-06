@@ -36,5 +36,20 @@ object WindowsCodePagesTests extends TestSuite {
     test("returns null for an unknown code page") {
       assert(charsetName(12345) == null)
     }
+
+    // Any ANSI code page (1252 on the CI runners, say) should have a charset in the JDK
+    test("ansi") {
+      val codePage = WindowsCodePages.ansi()
+      assert(codePage > 0)
+      assert(WindowsCodePages.ansiCharset() != null)
+    }
+
+    // 0 when the process has no console, which can happen on CI
+    test("consoleOutput") {
+      val codePage = WindowsCodePages.consoleOutput()
+      assert(codePage >= 0)
+      if (codePage == 0)
+        assert(WindowsCodePages.consoleOutputCharset() == null)
+    }
   }
 }

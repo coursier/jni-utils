@@ -29,6 +29,8 @@ public abstract class NativeApi {
     public abstract String GetModuleFileName();
 
     public abstract int GetOEMCodePage();
+    public abstract int GetACP();
+    public abstract int GetConsoleOutputCP();
 
 
     private static volatile NativeApi instance = null;

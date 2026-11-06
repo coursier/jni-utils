@@ -15,3 +15,21 @@ JNIEXPORT jint JNICALL Java_coursier_jniutils_DefaultNativeApi_GetOEMCodePageNat
   UNREFERENCED_PARAMETER(class);
   return (jint) GetOEMCP();
 }
+
+/* The system ANSI code page, used by the "A" variants of the Windows API functions. It's
+   the one sun.jnu.encoding reflects, but that property is frozen in native images. */
+JNIEXPORT jint JNICALL Java_coursier_jniutils_DefaultNativeApi_GetACPNative
+  (JNIEnv *env, jclass class) {
+  UNREFERENCED_PARAMETER(env);
+  UNREFERENCED_PARAMETER(class);
+  return (jint) GetACP();
+}
+
+/* The output code page of the console of the current process, as changed by chcp say.
+   GetConsoleOutputCP returns 0 if the process has no console. */
+JNIEXPORT jint JNICALL Java_coursier_jniutils_DefaultNativeApi_GetConsoleOutputCPNative
+  (JNIEnv *env, jclass class) {
+  UNREFERENCED_PARAMETER(env);
+  UNREFERENCED_PARAMETER(class);
+  return (jint) GetConsoleOutputCP();
+}

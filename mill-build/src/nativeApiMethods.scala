@@ -26,6 +26,8 @@ object NativeApiMethods {
 
     Method("GetModuleFileName", Nil, JType.String),
 
-    Method("GetOEMCodePage", Nil, JType.Int)
+    Method("GetOEMCodePage", Nil, JType.Int),
+    Method("GetACP", Nil, JType.Int),
+    Method("GetConsoleOutputCP", Nil, JType.Int)
   )
 }
