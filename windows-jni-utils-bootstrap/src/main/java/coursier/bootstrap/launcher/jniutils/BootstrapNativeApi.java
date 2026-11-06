@@ -50,7 +50,7 @@ public final class BootstrapNativeApi extends NativeApi {
     }
 
     static {
-        LoadWindowsLibrary.ensureInitialized();
+        LoadWindowsLibrary.ensureInitialized("bootstrap");
     }
 
     public static void setup() {

@@ -54,14 +54,17 @@ public abstract class NativeApi {
                 Class<NativeApi> nativeApiClass = NativeApi.class;
                 Class<LowPriorityNativeApi> lowPriorityNativeApiClass = LowPriorityNativeApi.class;
 
-                LoadWindowsLibrary.ensureInitialized();
-
+                // The implementations load the DLL themselves, each under a name of its own,
+                // when they're initialized. So we look for them before loading the DLL.
                 NativeApi found = firstService(nativeApiClass);
                 if (found == null)
                     found = firstService(lowPriorityNativeApiClass);
 
                 if (found == null)
                     throw new RuntimeException("No NativeApi instance available. Could not load a Service for " + nativeApiClass + " or " + lowPriorityNativeApiClass);
+
+                // In case the implementation doesn't load the DLL itself (no-op if it did)
+                LoadWindowsLibrary.ensureInitialized();
 
                 instance = found;
                 instance0 = found;

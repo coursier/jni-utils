@@ -46,4 +46,8 @@ public final class DefaultNativeApi extends LowPriorityNativeApi {
     public int GetOEMCodePage() {
         return GetOEMCodePageNative();
     }
+
+    static {
+        LoadWindowsLibrary.ensureInitialized();
+    }
 }
