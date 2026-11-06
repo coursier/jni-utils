@@ -153,9 +153,12 @@ or the `WindowsCodePages.…Charset` methods need to resolve arbitrary code page
 
 ### Modules
 
-The `windows-jni-utils` module is the only one most users need. The other
-modules are meant for coursier components that shade (relocate)
-`windows-jni-utils`:
+The `windows-jni-utils` module is the only one most users need, and the only
+one that is published. The other modules are meant for coursier components
+that shade (relocate) `windows-jni-utils`. They aren't published: they only
+consist of a `NativeApi` implementation and its GraalVM native image
+configuration, whose sources are checked in, for these components to use
+directly. The build only compiles and tests them.
 
 | Module                         | `NativeApi` implementation                              | Used by |
 |--------------------------------|---------------------------------------------------------|---------|
@@ -273,7 +276,7 @@ The resulting DLL is added to the resources of `windows-jni-utils`, as
 
 The methods of `NativeApi` are listed in
 `mill-build/src/jniutilsbuild/nativeApiMethods.scala`. From that list, the
-build generates (under `out/`, nothing generated is checked in):
+build generates:
 - the `NativeApi` implementations (`DefaultNativeApi`, `BootstrapNativeApi`,
   `LmNativeApi`, `ApiInternalNativeApi`), with their `native` methods and the
   methods delegating to them,
@@ -282,8 +285,21 @@ build generates (under `out/`, nothing generated is checked in):
 - the C functions implementing the `native` methods of the relocated
   implementations, which call the ones of `DefaultNativeApi`.
 
+Everything is generated under `out/`, except the implementations of the
+`windows-jni-utils-bootstrap`, `windows-jni-utils-lmcoursier` and
+`windows-jni-utils-coursierapi` modules, which are checked in under their
+`src/main/java` directory, so that these modules can be compiled from the
+checked out sources alone. Update them with
+```text
+$ ./mill __.generateNativeApi
+```
+and check that they're up-to-date (as CI does) with
+```text
+$ ./mill __.checkNativeApi
+```
+
 To add a native function, add an abstract method to `NativeApi`, add it to
-`nativeApiMethods.scala` too, and implement
+`nativeApiMethods.scala` too, run `./mill __.generateNativeApi`, and implement
 `Java_coursier_jniutils_DefaultNativeApi_<method name>Native` in a `.c` file
 under `windows-jni-utils/src/main/c` (including
 `coursier_jniutils_DefaultNativeApi.h`). If `NativeApi` and the list don't
@@ -319,12 +335,17 @@ $ ./mill ci.packageLocalM2 --output m2-repo.zip
 $ REPO_ARCHIVE=m2-repo.zip ./mill __.test
 ```
 
+The tests then use the `windows-jni-utils` JAR of the archive. As the
+`windows-jni-utils-bootstrap`, `windows-jni-utils-lmcoursier` and
+`windows-jni-utils-coursierapi` modules aren't published, their classes are
+still compiled from the sources of the build and put on the test class path.
+
 ### Continuous integration
 
 The [CI workflow](.github/workflows/ci.yml):
 1. builds the DLL and runs the tests on x86-64 and ARM64 Windows,
-2. puts the DLLs of both architectures in the JARs, and packages everything in
-   a local Maven repository archive (`ci.packageLocalM2`),
+2. puts the DLLs of both architectures in the `windows-jni-utils` JAR, and
+   packages everything in a local Maven repository archive (`ci.packageLocalM2`),
 3. runs the tests again against that archive, on both architectures,
 4. on pushes to `main` and on tags, publishes the artifacts to Maven Central,
    and to the GitHub Packages Maven repository of this repository.
