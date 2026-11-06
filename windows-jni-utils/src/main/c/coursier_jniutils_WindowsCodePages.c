@@ -11,5 +11,7 @@
    build time in a GraalVM native image, and none of them reports the OEM code page anyway. */
 JNIEXPORT jint JNICALL Java_coursier_jniutils_DefaultNativeApi_GetOEMCodePageNative
   (JNIEnv *env, jclass class) {
+  UNREFERENCED_PARAMETER(env);
+  UNREFERENCED_PARAMETER(class);
   return (jint) GetOEMCP();
 }

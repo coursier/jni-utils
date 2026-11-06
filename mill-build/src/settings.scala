@@ -93,7 +93,7 @@ private lazy val (windowsClassifier, windowsOtherClassifier) =
   if (isArm64) ("arm64-pc-win32", "x86_64-pc-win32")
   else ("x86_64-pc-win32", "arm64-pc-win32")
 
-private lazy val (platformArtifactsDirOpt, otherPlatformArtifactsDirOpt): (Option[os.Path], Option[os.Path]) = {
+private lazy val (platformArtifactsDirOpt, otherPlatformArtifactsDirOpt) = {
   val windowsX86_64ArtifactsDirOpt = Option(System.getenv("JNI_UTILS_WINDOWS_X86_64_ARTIFACTS_DIR"))
     .filter(_.nonEmpty)
     .map(os.Path(_, os.pwd))
@@ -132,6 +132,11 @@ private lazy val vcvars = vcvarsOpt.getOrElse {
 
 private def q = "\""
 
+// cl, lib and link print their diagnostics on stdout - pass it through, so that
+// these (and the errors /WX turns warnings into) are visible
+private def runBat(script: os.Path, cwd: os.Path): Unit =
+  os.proc(script).call(cwd = cwd, stdout = os.Inherit)
+
 trait HasCSources extends JavaModule with PublishModule {
 
   def windowsJavaHome: T[String]
@@ -143,8 +148,8 @@ trait HasCSources extends JavaModule with PublishModule {
   def cSources = Task.Sources("src/main/c")
 
   // /MT (static CRT, cl's default) is passed explicitly, so that the DLL doesn't depend
-  // on a vcruntime DLL
-  def cOptions = Task(Seq("/O2", "/W4", "/MT", "/utf-8"))
+  // on a vcruntime DLL. /WX makes warnings fail the build.
+  def cOptions = Task(Seq("/O2", "/W4", "/WX", "/MT", "/utf-8"))
 
   def cCompile = Task(persistent = true) {
     val destDir = Task.dest / "obj"
@@ -208,7 +213,7 @@ trait HasCSources extends JavaModule with PublishModule {
           |""".stripMargin
       val scriptPath = Task.dest / "run-cl.bat"
       os.write.over(scriptPath, script.getBytes, createFolders = true)
-      os.proc(scriptPath).call(cwd = destDir)
+      runBat(scriptPath, destDir)
       os.write.over(stampsFile, stamps.map { case (name, hash) => s"$name\t$hash\n" }.mkString)
     }
 
@@ -243,7 +248,7 @@ trait HasCSources extends JavaModule with PublishModule {
               |""".stripMargin
           val scriptPath = Task.dest / "run-lib.bat"
           os.write.over(scriptPath, script.getBytes, createFolders = true)
-          os.proc(scriptPath).call(cwd = Task.dest)
+          runBat(scriptPath, Task.dest)
           if (!os.isFile(output))
             sys.error(s"Error: $output not created")
         }
@@ -278,11 +283,11 @@ trait HasCSources extends JavaModule with PublishModule {
           val script =
            s"""@call "$vcvars"
               |if %errorlevel% neq 0 exit /b %errorlevel%
-              |link /DLL "/OUT:$dest" ${libsArgs.mkString(" ")} ${objs.map(f => "\"" + f.path.toString + "\"").mkString(" ")}
+              |link /DLL /WX "/OUT:$dest" ${libsArgs.mkString(" ")} ${objs.map(f => "\"" + f.path.toString + "\"").mkString(" ")}
               |""".stripMargin
           val scriptPath = Task.dest / "run-link.bat"
           os.write.over(scriptPath, script.getBytes, createFolders = true)
-          os.proc(scriptPath).call(cwd = Task.dest)
+          runBat(scriptPath, Task.dest)
         }
         PathRef(dest)
       }

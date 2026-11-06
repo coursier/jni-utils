@@ -24,6 +24,8 @@ static WCHAR *toWide(JNIEnv *env, jstring s) {
 JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_GetKnownFolderPathNative
   (JNIEnv *env, jclass cls, jstring rfid) {
 
+  UNREFERENCED_PARAMETER(cls);
+
   long res = 0;
 
   if (rfid == NULL)
@@ -49,7 +51,8 @@ JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_GetKnownFolder
     return NULL;
   }
 
-  const jstring result = (*env)->NewString(env, ppszPath, wcslen(ppszPath));
+  /* Windows paths are at most 32767 characters long, so their length fits in a jsize. */
+  const jstring result = (*env)->NewString(env, ppszPath, (jsize) wcslen(ppszPath));
   CoTaskMemFree(ppszPath);
 
   return result;
