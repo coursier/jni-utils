@@ -17,6 +17,8 @@ object NativeApiMethods {
   val methods: Seq[Method] = Seq(
     Method("terminalSize", Nil, JType.String),
     Method("enableAnsiOutput", Nil, JType.String),
+    Method("terminalSizeForStdHandle", Seq("stdHandle" -> JType.Int), JType.String),
+    Method("enableAnsiOutputForStdHandle", Seq("stdHandle" -> JType.Int), JType.String),
 
     Method("GetUserEnvironmentVariable", Seq("key" -> JType.String), JType.String),
     Method("SetUserEnvironmentVariable", Seq("key" -> JType.String, "value" -> JType.String), JType.String),

@@ -76,7 +76,8 @@ scrollback, and can be much larger than the number of visible lines.
 
 Both methods act on the standard output of the process, and throw an
 `IOException` if it isn't a console (when it's redirected to a file or a pipe,
-for example).
+for example). `WindowsAnsiTerminal.enableStderrAnsiOutput()` and
+`WindowsAnsiTerminal.stderrTerminalSize()` do the same, on the standard error.
 
 #### User environment variables
 

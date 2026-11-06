@@ -20,6 +20,11 @@ public abstract class NativeApi {
 
     public abstract String enableAnsiOutput();
 
+    // Same as the two methods above, but act on the standard handle passed, which is one
+    // of the STD_*_HANDLE values of GetStdHandle (STD_OUTPUT_HANDLE is -11, STD_ERROR_HANDLE -12)
+    public abstract String terminalSizeForStdHandle(int stdHandle);
+    public abstract String enableAnsiOutputForStdHandle(int stdHandle);
+
     public abstract String GetUserEnvironmentVariable(String key);
     public abstract String SetUserEnvironmentVariable(String key, String value);
     public abstract String DeleteUserEnvironmentVariable(String key);

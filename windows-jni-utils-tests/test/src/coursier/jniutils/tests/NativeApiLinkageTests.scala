@@ -20,6 +20,8 @@ object NativeApiLinkageTests extends TestSuite {
   private val recipes: Map[String, Ctx => Seq[AnyRef]] = Map(
     "terminalSize()"                                    -> (_ => Nil),
     "enableAnsiOutput()"                                -> (_ => Nil),
+    "terminalSizeForStdHandle(int)"                     -> (_ => Seq(Integer.valueOf(-12))),
+    "enableAnsiOutputForStdHandle(int)"                 -> (_ => Seq(Integer.valueOf(-12))),
     "GetUserEnvironmentVariable(String)"                -> (ctx => Seq(ctx.envKey)),
     "SetUserEnvironmentVariable(String,String)"         -> (ctx => Seq(ctx.envKey, "value")),
     "DeleteUserEnvironmentVariable(String)"             -> (ctx => Seq(ctx.envKey)),
