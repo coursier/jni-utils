@@ -50,7 +50,7 @@ public final class LmNativeApi extends NativeApi {
     }
 
     static {
-        LoadWindowsLibrary.ensureInitialized();
+        LoadWindowsLibrary.ensureInitialized("lmcoursier");
     }
 
     public static void setup() {

@@ -22,6 +22,12 @@ import java.util.Locale;
  * DLLs extracted from the JAR go by default to {@code <java.io.tmpdir>/coursier-jni-utils/<arch>/},
  * and are re-used by later runs. This directory can be changed via the
  * {@code coursier.jniutils.dll-dir} Java property.
+ *
+ * Each {@link NativeApi} implementation loads the DLL under a name of its own (like
+ * {@code csjniutils-<version>-bootstrap.dll}), see {@link #ensureInitialized(String)}. The JVM
+ * doesn't allow a given DLL file to be loaded by several class loaders, so this allows the
+ * different implementations (and copies of this library, possibly shaded) to load it from
+ * different class loaders.
  */
 public final class LoadWindowsLibrary {
 
@@ -58,30 +64,38 @@ public final class LoadWindowsLibrary {
         return fromClassPath(cl.getParent());
     }
 
-    static File fromResources(ClassLoader cl) throws IOException, URISyntaxException {
+    static File fromResources(ClassLoader cl, String variant) throws IOException, URISyntaxException {
         if (cl == null)
             return null;
         URL url = cl.getResource(dllResourcePath());
         if (url == null)
           return null;
-        if (url.getProtocol().equals("file"))
+        if (url.getProtocol().equals("file") && variant.isEmpty())
             return new File(url.toURI());
 
         byte[] content;
         try (InputStream is = url.openStream()) {
             content = readAll(is);
         }
+        return write(content, variant);
+    }
 
+    /**
+     * Writes content to the file the DLL should be loaded from for variant: in the extraction
+     * directory if possible, or in a temporary file else.
+     */
+    static File write(byte[] content, String variant) throws IOException {
+        String baseName = dllBaseName(variant);
         File dir = extractionDir();
         if (dir != null) {
             try {
-                return extract(content, dir);
+                return extract(content, dir, baseName);
             } catch (IOException | SecurityException ex) {
                 // can't write to the stable location, fall back to a temporary file below
             }
         }
 
-        File tmpFile = File.createTempFile(dllName(), ".dll");
+        File tmpFile = File.createTempFile(baseName + "-", ".dll");
         // deleteOnExit can't delete a loaded DLL on Windows, but that's the best we can do here
         tmpFile.deleteOnExit();
         try (FileOutputStream os = new FileOutputStream(tmpFile)) {
@@ -103,7 +117,7 @@ public final class LoadWindowsLibrary {
     }
 
     /**
-     * Writes content to {@code dir/<dllName>.dll}, unless that file already exists with the same
+     * Writes content to {@code dir/<baseName>.dll}, unless that file already exists with the same
      * content. The file is written atomically (written to a temporary file in the same directory,
      * then moved), so that concurrent JVMs never load a partially written DLL.
      *
@@ -111,14 +125,14 @@ public final class LoadWindowsLibrary {
      * versions), and can't be replaced (because another JVM loaded it), a new uniquely named
      * file is written in the same directory instead.
      */
-    static File extract(byte[] content, File dir) throws IOException {
-        File dest = new File(dir, dllName() + ".dll");
+    static File extract(byte[] content, File dir, String baseName) throws IOException {
+        File dest = new File(dir, baseName + ".dll");
         if (hasContent(dest, content))
             return dest;
 
         Files.createDirectories(dir.toPath());
 
-        Path tmp = Files.createTempFile(dir.toPath(), dllName() + "-", ".dll.part");
+        Path tmp = Files.createTempFile(dir.toPath(), baseName + "-", ".dll.part");
         try {
             Files.write(tmp, content);
             try {
@@ -129,7 +143,7 @@ public final class LoadWindowsLibrary {
                 // the existing file loaded, which prevents replacing it on Windows.
                 if (hasContent(dest, content))
                     return dest;
-                Path unique = Files.createTempFile(dir.toPath(), dllName() + "-", ".dll");
+                Path unique = Files.createTempFile(dir.toPath(), baseName + "-", ".dll");
                 move(tmp, unique);
                 File uniqueFile = unique.toFile();
                 uniqueFile.deleteOnExit();
@@ -178,8 +192,29 @@ public final class LoadWindowsLibrary {
 
     final static Object lock = new Object();
     static volatile boolean initialized = false;
-    /** Loads the DLL, unless it's already loaded or assumed to be. */
+
+    /** Loads the DLL under its default name, unless it's already loaded or assumed to be. */
     public static void ensureInitialized() {
+        ensureInitialized("");
+    }
+
+    /**
+     * Loads the DLL, unless it's already loaded or assumed to be.
+     *
+     * If variant isn't empty, the DLL is loaded from a file of its own, named like
+     * {@code csjniutils-<version>-<variant>.dll}, so that it doesn't conflict with the
+     * DLL loaded by other class loaders for other variants. Each {@link NativeApi}
+     * implementation passes its own variant here.
+     *
+     * Only the first call actually loads the DLL. Later ones are no-ops, whatever their variant,
+     * as all the {@link NativeApi} implementations of a given class loader can use the DLL
+     * loaded by the first one.
+     */
+    public static void ensureInitialized(String variant) {
+        if (variant == null)
+            variant = "";
+        if (!variant.matches("[A-Za-z0-9_.-]*"))
+            throw new IllegalArgumentException("Invalid DLL variant: '" + variant + "'");
         if (!initialized) {
             synchronized (lock) {
                 if (!initialized) {
@@ -191,14 +226,18 @@ public final class LoadWindowsLibrary {
                     File dll = fromClassPath(contextCl);
                     if (dll == null && ownCl != contextCl)
                         dll = fromClassPath(ownCl);
-                    if (dll == null)
-                        try {
-                            dll = fromResources(contextCl);
+                    try {
+                        if (dll != null && !variant.isEmpty())
+                            // copy the DLL found on the class path to a file specific to this variant
+                            dll = write(Files.readAllBytes(dll.toPath()), variant);
+                        if (dll == null) {
+                            dll = fromResources(contextCl, variant);
                             if (dll == null && ownCl != contextCl)
-                                dll = fromResources(ownCl);
-                        } catch (URISyntaxException | IOException ex) {
-                            throw new RuntimeException(ex);
+                                dll = fromResources(ownCl, variant);
                         }
+                    } catch (URISyntaxException | IOException ex) {
+                        throw new RuntimeException(ex);
+                    }
                     if (dll == null)
                         System.loadLibrary(dllName());
                     else
@@ -211,6 +250,10 @@ public final class LoadWindowsLibrary {
 
     final static String dllName() {
         return DllName.name;
+    }
+    /** Name of the DLL file for variant, without its ".dll" extension */
+    final static String dllBaseName(String variant) {
+        return variant.isEmpty() ? dllName() : dllName() + "-" + variant;
     }
     final static boolean isArm64() {
         String arch = System.getProperty("os.arch");

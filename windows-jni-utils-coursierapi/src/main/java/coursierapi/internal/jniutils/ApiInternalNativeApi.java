@@ -50,7 +50,7 @@ public final class ApiInternalNativeApi extends NativeApi {
     }
 
     static {
-        LoadWindowsLibrary.ensureInitialized();
+        LoadWindowsLibrary.ensureInitialized("coursierapi");
     }
 
     public static void setup() {

@@ -165,14 +165,12 @@ anymore. So each of those modules provides a `NativeApi` implementation, in a
 package that the corresponding project doesn't relocate, whose `native`
 methods are implemented by the same DLL as the default ones.
 
-`NativeApi.get()` picks the implementation to use:
-1. the one passed to `NativeApi.set(…)`, if any (the `setup()` method of the
-   alternative implementations above calls it),
-2. otherwise, the first `NativeApi` service found with `java.util.ServiceLoader`.
-   All the implementations above are registered as such, so if several of
-   them are on the class path, the first one there wins - call `setup()` (or
-   `NativeApi.set`) to pick one explicitly,
-3. otherwise, the first `LowPriorityNativeApi` service, if any.
+`NativeApi.get()` returns the implementation passed to `NativeApi.set(…)`, if
+any, and `DefaultNativeApi` otherwise. Projects shading `windows-jni-utils`
+need to call the `setup()` method of their implementation (like
+`BootstrapNativeApi.setup()`), which calls `NativeApi.set(…)`, before using
+the library: once relocated, the `native` methods of `DefaultNativeApi` can't
+be bound.
 
 ### Loading the DLL
 
@@ -182,9 +180,29 @@ in the same JVM. Upon first use, `LoadWindowsLibrary.ensureInitialized()`
 loads it from the first of these locations that has it:
 1. a file with that name, directly on the class path,
 2. the `META-INF/native/windows64` (or `windows64-arm64` on ARM64) resource
-   embedded in the JAR. If the resource isn't a file, it's extracted to a
-   temporary file first, deleted when the JVM exits,
+   embedded in the JAR. If the resource isn't a file, it's extracted to
+   `<java.io.tmpdir>/coursier-jni-utils/<arch>/` (or to the directory in the
+   `coursier.jniutils.dll-dir` Java property), and re-used by later runs,
 3. `java.library.path`, via `System.loadLibrary`.
+
+The JVM doesn't allow a given DLL file to be loaded by more than one class
+loader. So that the different `NativeApi` implementations (and the shaded
+copies of this library they go along with) can be used from different class
+loaders of the same JVM, each of them loads the DLL from a file of its own:
+
+| `NativeApi` implementation | DLL file                          |
+|----------------------------|-----------------------------------|
+| `DefaultNativeApi`         | `csjniutils-0.4.0.dll`            |
+| `BootstrapNativeApi`       | `csjniutils-0.4.0-bootstrap.dll`  |
+| `LmNativeApi`              | `csjniutils-0.4.0-lmcoursier.dll` |
+| `ApiInternalNativeApi`     | `csjniutils-0.4.0-coursierapi.dll`|
+
+The alternative implementations always extract the DLL to such a file (even
+when it's found directly on the class path, or as a resource that is already a
+file), and load it from there. Within a given class loader, the DLL is only
+loaded once, by the first implementation to be initialized, and is then used
+by all of them. Implementations other than the ones above can pick their own
+file name by calling `LoadWindowsLibrary.ensureInitialized("<variant>")`.
 
 Applications that already loaded the DLL by other means, or that link the
 native code statically (in a GraalVM native image, say), can call
@@ -265,7 +283,9 @@ $ ./mill __.test
 The tests live in `windows-jni-utils-tests`. They check the code page /
 charset mapping, and call the native APIs (module file name, known folders,
 user environment variables) through each `NativeApi` implementation (default,
-bootstrap, lmcoursier, coursierapi).
+bootstrap, lmcoursier, coursierapi). They also load the DLL via each
+implementation from class loaders of their own, to check that these don't
+conflict.
 
 Note that the environment variable tests write to the actual user environment
 in the registry (`HKEY_CURRENT_USER\Environment`). They use randomly-named

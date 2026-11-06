@@ -1,10 +1,5 @@
 package coursier.jniutils;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.Iterator;
-import java.util.ServiceLoader;
-
 /**
  * The native methods of this library.
  *
@@ -38,8 +33,13 @@ public abstract class NativeApi {
     /**
      * The implementation to use.
      *
-     * That's the one passed to {@link #set}, if any, else the first {@code NativeApi} service
-     * found by {@link ServiceLoader}, else the first {@link LowPriorityNativeApi} one.
+     * That's the one passed to {@link #set}, if any (the {@code setup()} method of the
+     * alternative implementations, like {@code BootstrapNativeApi}, calls it), else
+     * {@link DefaultNativeApi}.
+     *
+     * Projects shading this library need to call the {@code setup()} method of their own
+     * implementation beforehand, as the native methods of the relocated
+     * {@link DefaultNativeApi} can't be bound.
      *
      * This loads the native library, if it's not loaded already.
      */
@@ -51,40 +51,12 @@ public abstract class NativeApi {
         synchronized (lock) {
             instance0 = instance;
             if (instance0 == null) {
-                Class<NativeApi> nativeApiClass = NativeApi.class;
-                Class<LowPriorityNativeApi> lowPriorityNativeApiClass = LowPriorityNativeApi.class;
-
-                LoadWindowsLibrary.ensureInitialized();
-
-                NativeApi found = firstService(nativeApiClass);
-                if (found == null)
-                    found = firstService(lowPriorityNativeApiClass);
-
-                if (found == null)
-                    throw new RuntimeException("No NativeApi instance available. Could not load a Service for " + nativeApiClass + " or " + lowPriorityNativeApiClass);
-
-                instance = found;
-                instance0 = found;
+                // Initializing DefaultNativeApi loads the DLL
+                instance0 = new DefaultNativeApi();
+                instance = instance0;
             }
             return instance0;
         }
-    }
-
-    /**
-     * Looks for services via the thread context class loader, then via the class loader of
-     * this class.
-     */
-    private static <T> T firstService(Class<T> clazz) {
-        Iterator<T> iterator = ServiceLoader.load(clazz).iterator();
-        if (iterator.hasNext())
-            return iterator.next();
-        ClassLoader ownCl = NativeApi.class.getClassLoader();
-        if (ownCl != null && ownCl != Thread.currentThread().getContextClassLoader()) {
-            iterator = ServiceLoader.load(clazz, ownCl).iterator();
-            if (iterator.hasNext())
-                return iterator.next();
-        }
-        return null;
     }
 
     /** Forces the implementation returned by {@link #get}, or resets it if passed null. */
