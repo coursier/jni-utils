@@ -31,12 +31,20 @@ jstring _Java_coursier_jniutils_DefaultNativeApi_Terminal_lastError
 }
 
 /* GetStdHandle returns NULL, without setting the last error, when the process has
-   no standard output at all (e.g. a GUI process started without one). */
+   no such standard handle at all (e.g. a GUI process started without one). */
 static jstring _Java_coursier_jniutils_DefaultNativeApi_Terminal_stdHandleError
-  (JNIEnv *env, HANDLE handle) {
+  (JNIEnv *env, DWORD stdHandle, HANDLE handle) {
 
-  if (handle == NULL)
-    return (*env)->NewStringUTF(env, "error:GetStdHandle: no standard output handle");
+  if (handle == NULL) {
+    const char *msg = "error:GetStdHandle: no standard handle";
+    if (stdHandle == STD_OUTPUT_HANDLE)
+      msg = "error:GetStdHandle: no standard output handle";
+    else if (stdHandle == STD_ERROR_HANDLE)
+      msg = "error:GetStdHandle: no standard error handle";
+    else if (stdHandle == STD_INPUT_HANDLE)
+      msg = "error:GetStdHandle: no standard input handle";
+    return (*env)->NewStringUTF(env, msg);
+  }
   return _Java_coursier_jniutils_DefaultNativeApi_Terminal_lastError(env, "GetStdHandle");
 }
 
@@ -63,14 +71,13 @@ jstring _Java_coursier_jniutils_DefaultNativeApi_Terminal_format
   return result;
 }
 
-JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_terminalSizeNative
-  (JNIEnv *env, jclass class) {
+/* stdHandle is one of the STD_*_HANDLE values accepted by GetStdHandle */
+static jstring _Java_coursier_jniutils_DefaultNativeApi_Terminal_size
+  (JNIEnv *env, DWORD stdHandle) {
 
-  UNREFERENCED_PARAMETER(class);
-
-  HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
+  HANDLE handle = GetStdHandle(stdHandle);
   if (handle == INVALID_HANDLE_VALUE || handle == NULL) {
-    return _Java_coursier_jniutils_DefaultNativeApi_Terminal_stdHandleError(env, handle);
+    return _Java_coursier_jniutils_DefaultNativeApi_Terminal_stdHandleError(env, stdHandle, handle);
   }
 
   CONSOLE_SCREEN_BUFFER_INFO info;
@@ -87,14 +94,13 @@ JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_terminalSizeNa
   return _Java_coursier_jniutils_DefaultNativeApi_Terminal_format(env, "%d:%d", width, height);
 }
 
-JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_enableAnsiOutputNative
-  (JNIEnv *env, jclass class) {
+/* stdHandle is one of the STD_*_HANDLE values accepted by GetStdHandle */
+static jstring _Java_coursier_jniutils_DefaultNativeApi_Terminal_enableAnsiOutput
+  (JNIEnv *env, DWORD stdHandle) {
 
-  UNREFERENCED_PARAMETER(class);
-
-  HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
+  HANDLE handle = GetStdHandle(stdHandle);
   if (handle == INVALID_HANDLE_VALUE || handle == NULL) {
-    return _Java_coursier_jniutils_DefaultNativeApi_Terminal_stdHandleError(env, handle);
+    return _Java_coursier_jniutils_DefaultNativeApi_Terminal_stdHandleError(env, stdHandle, handle);
   }
 
   DWORD mode = 0;
@@ -113,4 +119,29 @@ JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_enableAnsiOutp
   }
 
   return (*env)->NewStringUTF(env, ret);
+}
+
+JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_terminalSizeNative
+  (JNIEnv *env, jclass class) {
+  UNREFERENCED_PARAMETER(class);
+  return _Java_coursier_jniutils_DefaultNativeApi_Terminal_size(env, STD_OUTPUT_HANDLE);
+}
+
+/* The STD_*_HANDLE values are ((DWORD) -10) and the like, passed as negative ints from Java */
+JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_terminalSizeForStdHandleNative
+  (JNIEnv *env, jclass class, jint stdHandle) {
+  UNREFERENCED_PARAMETER(class);
+  return _Java_coursier_jniutils_DefaultNativeApi_Terminal_size(env, (DWORD) stdHandle);
+}
+
+JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_enableAnsiOutputNative
+  (JNIEnv *env, jclass class) {
+  UNREFERENCED_PARAMETER(class);
+  return _Java_coursier_jniutils_DefaultNativeApi_Terminal_enableAnsiOutput(env, STD_OUTPUT_HANDLE);
+}
+
+JNIEXPORT jstring JNICALL Java_coursier_jniutils_DefaultNativeApi_enableAnsiOutputForStdHandleNative
+  (JNIEnv *env, jclass class, jint stdHandle) {
+  UNREFERENCED_PARAMETER(class);
+  return _Java_coursier_jniutils_DefaultNativeApi_Terminal_enableAnsiOutput(env, (DWORD) stdHandle);
 }

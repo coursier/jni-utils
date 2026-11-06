@@ -20,12 +20,16 @@ object NativeApiLinkageTests extends TestSuite {
   private val recipes: Map[String, Ctx => Seq[AnyRef]] = Map(
     "terminalSize()"                                    -> (_ => Nil),
     "enableAnsiOutput()"                                -> (_ => Nil),
+    "terminalSizeForStdHandle(int)"                     -> (_ => Seq(Integer.valueOf(-12))),
+    "enableAnsiOutputForStdHandle(int)"                 -> (_ => Seq(Integer.valueOf(-12))),
     "GetUserEnvironmentVariable(String)"                -> (ctx => Seq(ctx.envKey)),
     "SetUserEnvironmentVariable(String,String)"         -> (ctx => Seq(ctx.envKey, "value")),
     "DeleteUserEnvironmentVariable(String)"             -> (ctx => Seq(ctx.envKey)),
     "GetKnownFolderPath(String)"                        -> (_ => Seq("{3EB685DB-65F9-4CF6-A03A-E3EF65729F3D}")),
     "GetModuleFileName()"                               -> (_ => Nil),
-    "GetOEMCodePage()"                                  -> (_ => Nil)
+    "GetOEMCodePage()"                                  -> (_ => Nil),
+    "GetACP()"                                          -> (_ => Nil),
+    "GetConsoleOutputCP()"                              -> (_ => Nil)
   )
 
   private def signature(m: Method): String =

@@ -19,6 +19,28 @@ public final class WindowsCodePages {
     }
 
     /**
+     * The system ANSI code page.
+     *
+     * This is the code page of the "A" variants of the Windows API functions, which
+     * sun.jnu.encoding reflects (but that property is frozen at build time in a GraalVM
+     * native image), say 1252.
+     */
+    public static int ansi() {
+        return NativeApi.get().GetACP();
+    }
+
+    /**
+     * The output code page of the console of the current process, or 0 if the process has
+     * no console.
+     *
+     * This is the OEM code page by default, unless something called chcp (or
+     * SetConsoleOutputCP).
+     */
+    public static int consoleOutput() {
+        return NativeApi.get().GetConsoleOutputCP();
+    }
+
+    /**
      * The {@link Charset} for a Windows code page, or null if this JVM has no charset for it.
      *
      * Beware that in a GraalVM native image, only the charsets included at build time can be
@@ -56,5 +78,19 @@ public final class WindowsCodePages {
     /** The {@link Charset} for {@link #oem()}, or null if this JVM has no charset for it. */
     public static Charset oemCharset() {
         return charsetFor(oem());
+    }
+
+    /** The {@link Charset} for {@link #ansi()}, or null if this JVM has no charset for it. */
+    public static Charset ansiCharset() {
+        return charsetFor(ansi());
+    }
+
+    /**
+     * The {@link Charset} for {@link #consoleOutput()}, or null if the process has no console,
+     * or if this JVM has no charset for its code page.
+     */
+    public static Charset consoleOutputCharset() {
+        int codePage = consoleOutput();
+        return codePage == 0 ? null : charsetFor(codePage);
     }
 }

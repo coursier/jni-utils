@@ -9,20 +9,20 @@ import mill.api.{BuildCtx, Result}
 import mill.javalib.{PublishModule, SonatypeCentralPublishModule}
 import mill.javalib.publish.Artifact
 import mill.scalalib.*
-import millbuild.*
+import jniutilsbuild.*
 
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 
-object `windows-jni-utils` extends WindowsUtils with HasCSources with JniUtilsPublishModule with WithDllNameJava {
+object `windows-jni-utils` extends WindowsUtils with HasCSources with JniUtilsPublishModule with WithDllNameJava with GeneratedNativeApi {
   def linkingLibs = Seq("ole32", "shell32", "advapi32", "kernel32", "user32")
 
-  def compile = Task {
-    headers.`windows-jni-utils`.compile()
-    headers.`windows-jni-utils-bootstrap`.compile()
-    headers.`windows-jni-utils-lmcoursier`.compile()
-    headers.`windows-jni-utils-coursierapi`.compile()
-    super.compile()
+  def nativeApiImpl = NativeApiGen.default
+
+  // JNI headers of all the NativeApi implementations, and C forwarders of the relocated ones
+  def generatedCSources = Task {
+    NativeApiGen.writeC(Task.dest)
+    Seq(PathRef(Task.dest))
   }
 
   def windowsJavaHome = Task {
@@ -35,16 +35,19 @@ object `windows-jni-utils` extends WindowsUtils with HasCSources with JniUtilsPu
   }
 }
 
-object `windows-jni-utils-bootstrap` extends WindowsUtils with JniUtilsPublishModule {
+object `windows-jni-utils-bootstrap` extends WindowsUtils with JniUtilsPublishModule with GeneratedNativeApi {
   def moduleDeps = Seq(`windows-jni-utils`)
+  def nativeApiImpl = NativeApiGen.bootstrap
 }
 
-object `windows-jni-utils-lmcoursier` extends WindowsUtils with JniUtilsPublishModule {
+object `windows-jni-utils-lmcoursier` extends WindowsUtils with JniUtilsPublishModule with GeneratedNativeApi {
   def moduleDeps = Seq(`windows-jni-utils`)
+  def nativeApiImpl = NativeApiGen.lmcoursier
 }
 
-object `windows-jni-utils-coursierapi` extends WindowsUtils with JniUtilsPublishModule {
+object `windows-jni-utils-coursierapi` extends WindowsUtils with JniUtilsPublishModule with GeneratedNativeApi {
   def moduleDeps = Seq(`windows-jni-utils`)
+  def nativeApiImpl = NativeApiGen.coursierapi
 }
 
 object `windows-jni-utils-tests` extends ScalaModule {
@@ -101,25 +104,6 @@ object `windows-jni-utils-tests` extends ScalaModule {
         }
     def testFramework = "utest.runner.Framework"
   }
-}
-
-// compile these projects to generate or update JNI header files
-object headers extends Module {
-  object `windows-jni-utils` extends WindowsUtils with GenerateHeaders with WithDllNameJava
-  object `windows-jni-utils-bootstrap` extends WindowsUtils with GenerateHeaders {
-    def moduleDeps = Seq(`windows-jni-utils`)
-    def cDirectory = `windows-jni-utils`.cDirectory()
-  }
-  object `windows-jni-utils-lmcoursier` extends WindowsUtils with GenerateHeaders {
-    def moduleDeps = Seq(`windows-jni-utils`)
-    def cDirectory = `windows-jni-utils`.cDirectory()
-  }
-  object `windows-jni-utils-coursierapi` extends WindowsUtils with GenerateHeaders {
-    def moduleDeps = Seq(`windows-jni-utils`)
-    def cDirectory = `windows-jni-utils`.cDirectory()
-  }
-
-  def moduleDir = super.moduleDir / os.up
 }
 
 trait WindowsUtils extends MavenModule with JniUtilsPublishVersion {
