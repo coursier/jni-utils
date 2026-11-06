@@ -1,4 +1,4 @@
-package millbuild
+package jniutilsbuild
 
 import mill.*, scalalib.*
 import mill.api.BuildCtx

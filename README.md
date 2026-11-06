@@ -271,9 +271,9 @@ The resulting DLL is added to the resources of `windows-jni-utils`, as
 
 ### Native methods
 
-The methods of `NativeApi` are listed in `mill-build/src/nativeApiMethods.scala`.
-From that list, the build generates (under `out/`, nothing generated is
-checked in):
+The methods of `NativeApi` are listed in
+`mill-build/src/jniutilsbuild/nativeApiMethods.scala`. From that list, the
+build generates (under `out/`, nothing generated is checked in):
 - the `NativeApi` implementations (`DefaultNativeApi`, `BootstrapNativeApi`,
   `LmNativeApi`, `ApiInternalNativeApi`), with their `native` methods and the
   methods delegating to them,

@@ -9,7 +9,7 @@ import mill.api.{BuildCtx, Result}
 import mill.javalib.{PublishModule, SonatypeCentralPublishModule}
 import mill.javalib.publish.Artifact
 import mill.scalalib.*
-import millbuild.*
+import jniutilsbuild.*
 
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*

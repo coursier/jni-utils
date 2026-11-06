@@ -1,6 +1,6 @@
-package millbuild
+package jniutilsbuild
 
-import millbuild.NativeApiGen.{JType, Method}
+import jniutilsbuild.NativeApiGen.{JType, Method}
 
 object NativeApiMethods {
 
