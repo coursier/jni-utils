@@ -93,7 +93,7 @@ private lazy val (windowsClassifier, windowsOtherClassifier) =
   if (isArm64) ("arm64-pc-win32", "x86_64-pc-win32")
   else ("x86_64-pc-win32", "arm64-pc-win32")
 
-private lazy val (platformArtifactsDirOpt, otherPlatformArtifactsDirOpt): (Option[os.Path], Option[os.Path]) = {
+private lazy val (platformArtifactsDirOpt, otherPlatformArtifactsDirOpt) = {
   val windowsX86_64ArtifactsDirOpt = Option(System.getenv("JNI_UTILS_WINDOWS_X86_64_ARTIFACTS_DIR"))
     .filter(_.nonEmpty)
     .map(os.Path(_, os.pwd))
