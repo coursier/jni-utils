@@ -14,7 +14,7 @@ import millbuild.*
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 
-object `windows-jni-utils` extends MavenModule with JniUtilsPublishVersion with HasCSources with JniUtilsPublishModule with WithDllNameJava {
+object `windows-jni-utils` extends WindowsUtils with HasCSources with JniUtilsPublishModule with WithDllNameJava {
   def linkingLibs = Seq("ole32", "shell32", "advapi32", "kernel32", "user32")
 
   def compile = Task {
@@ -33,10 +33,6 @@ object `windows-jni-utils` extends MavenModule with JniUtilsPublishVersion with 
     if (dir.getName == "jre") dir.getParent
     else value
   }
-
-  def javacOptions = super.javacOptions() ++ Seq(
-    "--release", "8"
-  )
 }
 
 object `windows-jni-utils-bootstrap` extends WindowsUtils with JniUtilsPublishModule {
@@ -127,8 +123,10 @@ object headers extends Module {
 }
 
 trait WindowsUtils extends MavenModule with JniUtilsPublishVersion {
+  // We keep targeting Java 8 on purpose - silence javac's warning about it being obsolete
   def javacOptions = super.javacOptions() ++ Seq(
-    "--release", "8"
+    "--release", "8",
+    "-Xlint:-options"
   )
 }
 
