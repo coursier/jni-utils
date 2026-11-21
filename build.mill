@@ -1,4 +1,4 @@
-//| mill-version: 1.4.0-M2
+//| mill-version: 1.4.0-M3
 //| mill-jvm-opts: ["-Xmx2g"]
 
 package build
