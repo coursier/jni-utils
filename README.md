@@ -214,6 +214,18 @@ loaded once, by the first implementation to be initialized, and is then used
 by all of them. Implementations other than the ones above can pick their own
 file name by calling `LoadWindowsLibrary.ensureInitialized("<variant>")`.
 
+Several copies of a given implementation can still end up in different class
+loaders of the same JVM, like when a build tool loads several copies of a
+library depending on this one. If the JVM refuses to load the DLL because
+another class loader loaded the same file already ("already loaded in another
+classloader"), it's copied to `<name>-1.dll`, `<name>-2.dll`, etc. (like
+`csjniutils-0.4.0-1.dll`), in the same directory as the extracted DLLs, and the
+first of those not loaded by another class loader is loaded. At most 16 copies
+are tried by default, which the `coursier.jniutils.max-dll-copies` Java
+property can change (it's read once, when the library loads the DLL for the
+first time; `0` disables the copies, and invalid values are ignored). Only that
+error leads to trying copies: any other loading error is thrown as is.
+
 Applications that already loaded the DLL by other means, or that link the
 native code statically (in a GraalVM native image, say), can call
 `LoadWindowsLibrary.assumeInitialized()` to skip that step.
@@ -316,8 +328,8 @@ The tests live in `windows-jni-utils-tests`. They check the code page /
 charset mapping, and call the native APIs (module file name, known folders,
 user environment variables) through each `NativeApi` implementation (default,
 bootstrap, lmcoursier, coursierapi). They also load the DLL via each
-implementation from class loaders of their own, to check that these don't
-conflict.
+implementation from class loaders of their own, and the default implementation
+from several class loaders, to check that these don't conflict.
 
 Note that the environment variable tests write to the actual user environment
 in the registry (`HKEY_CURRENT_USER\Environment`). They use randomly-named

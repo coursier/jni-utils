@@ -91,5 +91,66 @@ object ClassLoaderIsolationTests extends TestSuite {
         assert(Files.isRegularFile(f))
       }
     }
+
+    test("same implementation in several class loaders") {
+      // Same setup as above, except that the default implementation is loaded several times,
+      // each time from a class loader of its own, all of them finding the same DLL resource
+      LoadWindowsLibrary.ensureInitialized()
+
+      val tmpDir = Files.createTempDirectory("jni-utils-tests")
+      val dllDir = tmpDir.resolve("dlls")
+
+      val resourceDir = tmpDir.resolve("resources")
+      val dllResource = getClass.getClassLoader.getResource(dllResourcePath)
+      assert(dllResource != null)
+      val resourceCopy = resourceDir.resolve(dllResourcePath)
+      Files.createDirectories(resourceCopy.getParent)
+      val is = dllResource.openStream()
+      try Files.copy(is, resourceCopy)
+      finally is.close()
+
+      val className = "coursier.jniutils.DefaultNativeApi"
+      val classPath =
+        (Seq(resourceDir.toUri.toURL) ++
+          Seq(classOf[LoadWindowsLibrary].getName, className).map(location)).distinct
+      val parent = ClassLoader.getSystemClassLoader.getParent
+      val loaderCount = 3
+
+      val thread = Thread.currentThread()
+      val previousCl = thread.getContextClassLoader
+      val previousDllDir = Option(System.getProperty("coursier.jniutils.dll-dir"))
+      val codePages =
+        try {
+          System.setProperty("coursier.jniutils.dll-dir", dllDir.toString)
+          for (_ <- 1 to loaderCount) yield {
+            val loader = new URLClassLoader(classPath.toArray, parent)
+            thread.setContextClassLoader(loader)
+            val clazz = Class.forName(className, true, loader)
+            assert(clazz.getClassLoader == loader)
+            val api = clazz.getConstructor().newInstance()
+            clazz.getMethod("GetOEMCodePage").invoke(api).asInstanceOf[Int]
+          }
+        }
+        finally {
+          thread.setContextClassLoader(previousCl)
+          previousDllDir match {
+            case Some(value) => System.setProperty("coursier.jniutils.dll-dir", value)
+            case None        => System.clearProperty("coursier.jniutils.dll-dir")
+          }
+        }
+
+      assert(codePages.length == loaderCount)
+      assert(codePages.forall(_ > 0))
+
+      // The first class loader loads the DLL resource as is, the next ones get copies
+      val elems    = dllResourcePath.split('/')
+      val archDir  = elems(elems.length - 2)
+      val baseName = elems.last.stripSuffix(".dll")
+      for (i <- 1 until loaderCount) {
+        val f = dllDir.resolve(archDir).resolve(s"$baseName-$i.dll")
+        assert(Files.isRegularFile(f))
+      }
+      assert(!Files.exists(dllDir.resolve(archDir).resolve(s"$baseName-$loaderCount.dll")))
+    }
   }
 }

@@ -28,6 +28,12 @@ import java.util.Locale;
  * doesn't allow a given DLL file to be loaded by several class loaders, so this allows the
  * different implementations (and copies of this library, possibly shaded) to load it from
  * different class loaders.
+ *
+ * Several copies of a given implementation can still end up in different class loaders of the
+ * same JVM (like when a build tool loads several copies of a library depending on this one). When
+ * the JVM refuses to load the DLL because another class loader loaded the same file already, it's
+ * copied to {@code <name>-1.dll}, {@code <name>-2.dll}, etc. in the same directory, and loaded from
+ * there, see {@link #load(File, String, PathLoader)}.
  */
 public final class LoadWindowsLibrary {
 
@@ -85,7 +91,14 @@ public final class LoadWindowsLibrary {
      * directory if possible, or in a temporary file else.
      */
     static File write(byte[] content, String variant) throws IOException {
-        String baseName = dllBaseName(variant);
+        return writeAs(content, dllBaseName(variant));
+    }
+
+    /**
+     * Writes content to the file named {@code <baseName>.dll} in the extraction directory if
+     * possible, or to a temporary file else.
+     */
+    static File writeAs(byte[] content, String baseName) throws IOException {
         File dir = extractionDir();
         if (dir != null) {
             try {
@@ -241,11 +254,121 @@ public final class LoadWindowsLibrary {
                     if (dll == null)
                         System.loadLibrary(dllName());
                     else
-                        System.load(dll.getAbsolutePath());
+                        load(dll, variant, System::load);
                     initialized = true;
                 }
             }
         }
+    }
+
+    /** Something loading a DLL from its absolute path, {@link System#load} in practice. */
+    interface PathLoader {
+        void load(String path);
+    }
+
+    /** Default value of {@link #maxCopies}. */
+    final static int defaultMaxCopies = 16;
+
+    /** Java property overriding {@link #defaultMaxCopies}. */
+    final static String maxCopiesProperty = "coursier.jniutils.max-dll-copies";
+
+    /**
+     * Maximum number of copies {@link #load(File, String, PathLoader)} writes, when the DLL
+     * can't be loaded because other class loaders loaded it already.
+     *
+     * Read once, from the {@code coursier.jniutils.max-dll-copies} Java property if it's set,
+     * when this class is initialized. 0 disables the copies. Values that aren't non-negative
+     * integers are ignored, in favor of {@link #defaultMaxCopies}.
+     */
+    final static int maxCopies = parseMaxCopies(System.getProperty(maxCopiesProperty));
+
+    static int parseMaxCopies(String value) {
+        if (value == null)
+            return defaultMaxCopies;
+        value = value.trim();
+        if (value.isEmpty())
+            return defaultMaxCopies;
+        try {
+            int parsed = Integer.parseInt(value);
+            return parsed >= 0 ? parsed : defaultMaxCopies;
+        } catch (NumberFormatException ex) {
+            return defaultMaxCopies;
+        }
+    }
+
+    /**
+     * Whether ex is the error the JVM throws when the DLL file was already loaded by another
+     * class loader. The JVM throws it itself (it's not an error from the OS), with a message
+     * made of a hard-coded string, that isn't localized, and is the same on Java 8 and later
+     * versions.
+     */
+    static boolean isLoadedByAnotherClassLoader(UnsatisfiedLinkError ex) {
+        String message = ex.getMessage();
+        return message != null && message.contains("already loaded in another classloader");
+    }
+
+    /**
+     * Loads dll via loader.
+     *
+     * If the JVM refuses to load it because another class loader loaded the same file already,
+     * this copies it to {@code <name>-1.dll}, {@code <name>-2.dll}, etc. (at most
+     * {@link #maxCopies} of them), in the same directory as the other DLLs extracted from the JAR
+     * (a temporary file if that directory can't be written), and loads the first of those that
+     * isn't loaded by another class loader. These copies are re-used by later runs, like the
+     * extracted DLLs.
+     *
+     * Any other error is thrown as is, without trying copies.
+     */
+    static void load(File dll, String variant, PathLoader loader) {
+        load(dll, variant, loader, maxCopies);
+    }
+
+    /** Same as {@link #load(File, String, PathLoader)}, trying at most maxCopies copies. */
+    static void load(File dll, String variant, PathLoader loader, int maxCopies) {
+        UnsatisfiedLinkError firstError;
+        try {
+            loader.load(dll.getAbsolutePath());
+            return;
+        } catch (UnsatisfiedLinkError ex) {
+            if (!isLoadedByAnotherClassLoader(ex) || maxCopies <= 0)
+                throw ex;
+            firstError = ex;
+        }
+
+        byte[] content;
+        try {
+            content = Files.readAllBytes(dll.toPath());
+        } catch (IOException | SecurityException ex) {
+            firstError.addSuppressed(ex);
+            throw firstError;
+        }
+
+        String baseName = dllBaseName(variant);
+        for (int i = 1; i <= maxCopies; i++) {
+            File copy;
+            try {
+                copy = writeAs(content, baseName + "-" + i);
+            } catch (IOException | SecurityException ex) {
+                firstError.addSuppressed(ex);
+                throw firstError;
+            }
+            try {
+                loader.load(copy.getAbsolutePath());
+                return;
+            } catch (UnsatisfiedLinkError ex) {
+                if (!isLoadedByAnotherClassLoader(ex)) {
+                    ex.addSuppressed(firstError);
+                    throw ex;
+                }
+            }
+        }
+
+        UnsatisfiedLinkError error = new UnsatisfiedLinkError(
+            "Could not load " + dll + " or any of its " + maxCopies +
+            " copies, as they're all loaded by other class loaders"
+        );
+        error.initCause(firstError);
+        throw error;
     }
 
     final static String dllName() {
